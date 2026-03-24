@@ -1,0 +1,3799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZAPP — Live Quiz</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   BASE
+============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0a0910;
+  --surface: #12111a;
+  --card: #1a1927;
+  --border: rgba(255,255,255,0.07);
+  --text: #f0eeff;
+  --muted: rgba(240,238,255,0.42);
+  --accent: #7b5ef8;
+  --accent2: #f8985e;
+  --green: #3de8a0;
+  --red: #f85e7b;
+  --yellow: #f8d45e;
+  --blue: #5eb8f8;
+  --r: 14px;
+  --font-head: 'Bebas Neue', sans-serif;
+  --font-body: 'Plus Jakarta Sans', sans-serif;
+}
+html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: var(--font-body); font-size: 15px; cursor: none; }
+
+/* ============================================================
+   CUSTOM CURSOR
+============================================================ */
+#cursor {
+  position: fixed; width: 12px; height: 12px; border-radius: 50%;
+  background: var(--accent); pointer-events: none; z-index: 99999;
+  transform: translate(-50%, -50%);
+  transition: transform 0.08s, width 0.2s, height 0.2s, background 0.2s, opacity 0.2s;
+  mix-blend-mode: screen;
+}
+#cursor-ring {
+  position: fixed; width: 38px; height: 38px; border-radius: 50%;
+  border: 1.5px solid rgba(123,94,248,0.5); pointer-events: none; z-index: 99998;
+  transform: translate(-50%, -50%);
+  transition: left 0.12s ease, top 0.12s ease, width 0.25s, height 0.25s, border-color 0.25s, opacity 0.25s;
+}
+body:has(button:hover) #cursor, body:has(a:hover) #cursor { width: 20px; height: 20px; background: var(--accent2); }
+body:has(button:hover) #cursor-ring, body:has(a:hover) #cursor-ring { width: 56px; height: 56px; border-color: rgba(248,152,94,0.6); }
+
+/* ============================================================
+   WIPE OVERLAY TRANSITION
+============================================================ */
+#wipe {
+  position: fixed; inset: 0; z-index: 9000; pointer-events: none;
+  transform: scaleX(0); transform-origin: left;
+  background: var(--accent);
+  will-change: transform;
+}
+#wipe.enter  { animation: wipeEnter  0.55s cubic-bezier(0.76,0,0.24,1) forwards; }
+#wipe.exit   { animation: wipeExit   0.55s cubic-bezier(0.76,0,0.24,1) forwards; }
+@keyframes wipeEnter { 0%{transform:scaleX(0);transform-origin:left} 100%{transform:scaleX(1);transform-origin:left} }
+@keyframes wipeExit  { 0%{transform:scaleX(1);transform-origin:right} 100%{transform:scaleX(0);transform-origin:right} }
+
+/* ============================================================
+   SCREEN SYSTEM
+============================================================ */
+.screen {
+  position: fixed; inset: 0; overflow-y: auto; overflow-x: hidden;
+  display: flex; flex-direction: column; padding: 1.5rem;
+  opacity: 0; pointer-events: none;
+  transform: scale(0.97) translateY(12px);
+  transition: opacity 0.45s ease, transform 0.45s cubic-bezier(0.34,1.26,0.64,1);
+  will-change: transform, opacity;
+}
+.screen.active {
+  opacity: 1; pointer-events: all;
+  transform: scale(1) translateY(0);
+}
+.screen.exit-up {
+  opacity: 0; transform: scale(1.03) translateY(-18px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+/* ============================================================
+   ANIMATED BG GRID
+============================================================ */
+body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: 0;
+  background-image:
+    linear-gradient(rgba(123,94,248,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(123,94,248,0.03) 1px, transparent 1px);
+  background-size: 48px 48px;
+  animation: gridDrift 20s linear infinite;
+}
+@keyframes gridDrift { 0%{background-position:0 0} 100%{background-position:48px 48px} }
+
+/* noise grain overlay */
+body::after {
+  content:'';
+  position:fixed;inset:0;z-index:1;pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  opacity:0.4;
+}
+
+/* ============================================================
+   TYPOGRAPHY REVEAL ANIMATIONS
+============================================================ */
+.reveal-up {
+  overflow: hidden;
+  display: block;
+}
+.reveal-up span {
+  display: block;
+  transform: translateY(110%);
+  opacity: 0;
+  animation: revealUp 0.7s cubic-bezier(0.16,1,0.3,1) forwards;
+}
+@keyframes revealUp {
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* staggered children */
+.stagger > * {
+  opacity: 0;
+  transform: translateY(20px);
+  animation: staggerIn 0.6s cubic-bezier(0.34,1.26,0.64,1) forwards;
+}
+.stagger > *:nth-child(1) { animation-delay: 0.05s; }
+.stagger > *:nth-child(2) { animation-delay: 0.12s; }
+.stagger > *:nth-child(3) { animation-delay: 0.19s; }
+.stagger > *:nth-child(4) { animation-delay: 0.26s; }
+.stagger > *:nth-child(5) { animation-delay: 0.33s; }
+.stagger > *:nth-child(6) { animation-delay: 0.40s; }
+@keyframes staggerIn {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* clip-reveal for large display text */
+.clip-reveal {
+  clip-path: inset(0 100% 0 0);
+  animation: clipReveal 0.8s cubic-bezier(0.76,0,0.24,1) forwards;
+}
+@keyframes clipReveal {
+  to { clip-path: inset(0 0% 0 0); }
+}
+
+/* letter by letter */
+.letter-reveal span { display: inline-block; opacity: 0; transform: translateY(30px) rotate(8deg); }
+.letter-reveal.go span { animation: letterIn 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+@keyframes letterIn { to { opacity:1; transform:translateY(0) rotate(0); } }
+
+/* ============================================================
+   SHARED COMPONENTS
+============================================================ */
+.logo-mark {
+  display: flex; align-items: center; gap: 8px; position: relative; z-index: 2;
+}
+.logo-z {
+  font-family: var(--font-head); font-size: 26px;
+  background: var(--accent); color: var(--bg);
+  padding: 2px 10px; border-radius: 6px; line-height: 1.15;
+  box-shadow: 0 0 30px rgba(123,94,248,0.5);
+}
+.logo-txt { font-family: var(--font-head); font-size: 24px; letter-spacing: 0.06em; }
+
+.nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem; position: relative; z-index: 2; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 12px 26px; border-radius: 100px; border: none; cursor: none;
+  font-family: var(--font-body); font-size: 15px; font-weight: 700;
+  position: relative; overflow: hidden;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.btn::before {
+  content: '';
+  position: absolute; inset: 0; border-radius: inherit;
+  background: rgba(255,255,255,0.1);
+  transform: translateX(-100%) skewX(-15deg);
+  transition: transform 0.4s cubic-bezier(0.76,0,0.24,1);
+}
+.btn:hover::before { transform: translateX(100%) skewX(-15deg); }
+.btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
+.btn:active { transform: scale(0.97); }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { box-shadow: 0 8px 32px rgba(123,94,248,0.45); }
+.btn-ghost { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+.btn-success { background: var(--green); color: var(--bg); }
+.btn-success:hover { box-shadow: 0 8px 32px rgba(61,232,160,0.35); }
+.btn-danger { background: rgba(248,94,123,0.12); color: var(--red); border: 1px solid rgba(248,94,123,0.25); }
+.btn-sm { padding: 8px 18px; font-size: 13px; }
+.btn-lg { padding: 16px 40px; font-size: 17px; border-radius: 14px; }
+.btn-full { width: 100%; border-radius: 14px; }
+
+/* tilt card effect */
+.tilt-card {
+  transform-style: preserve-3d;
+  transition: transform 0.3s ease;
+  will-change: transform;
+}
+
+/* ============================================================
+   PILL / CHIP
+============================================================ */
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 12px; border-radius: 100px;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.05em;
+  text-transform: uppercase; border: 1px solid;
+}
+.chip-accent { background: rgba(123,94,248,0.15); color: var(--accent); border-color: rgba(123,94,248,0.3); }
+.chip-green  { background: rgba(61,232,160,0.12); color: var(--green); border-color: rgba(61,232,160,0.3); }
+.chip-red    { background: rgba(248,94,123,0.12); color: var(--red); border-color: rgba(248,94,123,0.3); }
+.chip-live   { background: rgba(61,232,160,0.15); color: var(--green); border-color: rgba(61,232,160,0.35); }
+.chip-live::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: livePulse 1.4s ease infinite; }
+@keyframes livePulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.7)} }
+
+/* ============================================================
+   INPUT
+============================================================ */
+input, textarea, select {
+  background: var(--card); border: 1.5px solid var(--border); color: var(--text);
+  border-radius: 12px; padding: 13px 16px;
+  font-family: var(--font-body); font-size: 15px;
+  outline: none; width: 100%;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  cursor: none;
+}
+input:focus, textarea:focus, select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(123,94,248,0.15);
+}
+label { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; color: var(--muted); text-transform: uppercase; display: block; margin-bottom: 6px; }
+
+/* ============================================================
+   CARD
+============================================================ */
+.card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 1.25rem;
+  backdrop-filter: blur(12px);
+  position: relative; overflow: hidden;
+}
+.card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(123,94,248,0.4), transparent);
+}
+
+/* ============================================================
+   LANDING SCREEN
+============================================================ */
+#s-land {
+  justify-content: center; align-items: center;
+  background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(123,94,248,0.12) 0%, transparent 70%);
+}
+.land-inner {
+  max-width: 520px; width: 100%; position: relative; z-index: 2;
+}
+.land-title {
+  font-family: var(--font-head);
+  font-size: clamp(56px,10vw,96px);
+  line-height: 0.9;
+  letter-spacing: 0.02em;
+  margin-bottom: 1.25rem;
+}
+.land-title em { color: var(--accent); font-style: normal; }
+.land-sub { font-size: 16px; color: var(--muted); line-height: 1.75; margin-bottom: 2rem; }
+
+/* mode tabs */
+.tab-bar {
+  display: flex; background: var(--card); border-radius: 100px;
+  padding: 4px; gap: 4px; margin-bottom: 1.5rem;
+  border: 1px solid var(--border);
+}
+.tab-btn {
+  flex: 1; padding: 11px; border: none; border-radius: 100px;
+  cursor: none; font-family: var(--font-body); font-weight: 700; font-size: 14px;
+  background: transparent; color: var(--muted);
+  transition: background 0.25s, color 0.25s, box-shadow 0.25s;
+}
+.tab-btn.active {
+  background: var(--accent); color: #fff;
+  box-shadow: 0 4px 16px rgba(123,94,248,0.4);
+}
+
+/* ============================================================
+   FLOATING PARTICLES (landing bg deco)
+============================================================ */
+.particle {
+  position: absolute; border-radius: 50%;
+  background: var(--accent); opacity: 0;
+  animation: floatP var(--dur, 6s) ease-in-out var(--delay, 0s) infinite;
+  pointer-events: none; z-index: 0;
+}
+@keyframes floatP {
+  0%   { opacity: 0; transform: translateY(0) scale(0.5); }
+  20%  { opacity: 0.25; }
+  80%  { opacity: 0.1; }
+  100% { opacity: 0; transform: translateY(-120px) scale(1.2); }
+}
+
+/* ============================================================
+   CREATE SCREEN
+============================================================ */
+#s-create { background: radial-gradient(ellipse 60% 40% at 80% 20%, rgba(248,152,94,0.07) 0%, transparent 60%); }
+.q-card {
+  background: var(--card); border: 1.5px solid var(--border);
+  border-radius: var(--r); padding: 1rem; margin-bottom: 8px;
+  cursor: none; transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+  position: relative; overflow: hidden;
+}
+.q-card:hover { border-color: rgba(123,94,248,0.4); transform: translateX(4px); box-shadow: -4px 0 0 var(--accent); }
+.q-num { font-family: var(--font-head); font-size: 12px; color: var(--muted); letter-spacing: 0.05em; margin-bottom: 4px; }
+.q-text { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.q-meta { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.q-form {
+  background: var(--card); border: 2px solid var(--accent);
+  border-radius: var(--r); padding: 1.25rem; margin-bottom: 1rem;
+  display: none;
+  animation: expandIn 0.35s cubic-bezier(0.34,1.26,0.64,1);
+}
+@keyframes expandIn { from { transform: scaleY(0.85); opacity: 0; } to { transform: scaleY(1); opacity: 1; } }
+.q-form.show { display: block; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.gap-sm { gap: 8px; }
+
+/* ============================================================
+   LOBBY SCREEN
+============================================================ */
+#s-lobby {
+  background: radial-gradient(ellipse 70% 50% at 50% 50%, rgba(61,232,160,0.06) 0%, transparent 70%);
+}
+.game-code {
+  font-family: var(--font-head); font-size: clamp(52px,12vw,88px);
+  letter-spacing: 0.18em; text-align: center;
+  color: var(--accent);
+  text-shadow: 0 0 60px rgba(123,94,248,0.5), 0 0 120px rgba(123,94,248,0.2);
+  animation: codePulse 3s ease infinite;
+  position: relative; z-index: 2;
+}
+@keyframes codePulse {
+  0%,100%{text-shadow:0 0 60px rgba(123,94,248,0.5),0 0 120px rgba(123,94,248,0.2)}
+  50%{text-shadow:0 0 80px rgba(123,94,248,0.8),0 0 160px rgba(123,94,248,0.35)}
+}
+.player-bubble {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 100px; padding: 6px 14px 6px 10px;
+  font-size: 13px; font-weight: 600; margin: 4px;
+  animation: bubbleIn 0.4s cubic-bezier(0.34,1.56,0.64,1) forwards;
+  opacity: 0;
+}
+@keyframes bubbleIn { to { opacity:1; transform:scale(1); } from { opacity:0; transform:scale(0.5); } }
+.p-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex-shrink: 0; box-shadow: 0 0 6px var(--green); }
+
+/* ============================================================
+   QUESTION SCREEN — HOST
+============================================================ */
+#s-host-q {
+  background: var(--bg);
+}
+.q-number-huge {
+  font-family: var(--font-head);
+  font-size: clamp(80px,18vw,160px);
+  line-height: 0.85;
+  color: rgba(123,94,248,0.08);
+  position: absolute; right: -0.05em; top: -0.1em;
+  pointer-events: none; user-select: none;
+  animation: numFloat 4s ease-in-out infinite;
+}
+@keyframes numFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+
+/* answer bars */
+.ans-bar-wrap { display: flex; flex-direction: column; gap: 8px; }
+.ans-bar-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; background: var(--card); border: 1px solid var(--border);
+  border-radius: 10px; overflow: hidden; position: relative;
+}
+.ans-bar-fill {
+  position: absolute; left: 0; top: 0; bottom: 0; border-radius: 10px;
+  transition: width 0.7s cubic-bezier(0.34,1,0.64,1);
+  opacity: 0.18;
+}
+.ans-letter-badge {
+  font-family: var(--font-head); font-size: 18px; width: 26px;
+  text-align: center; position: relative; z-index: 1;
+}
+.ans-bar-text { flex: 1; font-size: 14px; font-weight: 500; position: relative; z-index: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ans-bar-count { font-family: var(--font-head); font-size: 18px; position: relative; z-index: 1; }
+
+/* ============================================================
+   ANSWER OPTIONS — PLAYER & HOST PREVIEW
+============================================================ */
+.opt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 1rem; }
+.opt {
+  padding: 20px 18px 18px; border-radius: var(--r);
+  border: 2px solid var(--border);
+  cursor: none; background: var(--card);
+  transition: transform 0.15s cubic-bezier(0.34,1.26,0.64,1), border-color 0.15s, box-shadow 0.15s, background 0.15s;
+  position: relative; overflow: hidden;
+}
+.opt::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  background: radial-gradient(circle at var(--mx,50%) var(--my,50%), rgba(255,255,255,0.08) 0%, transparent 60%);
+  opacity: 0; transition: opacity 0.3s;
+}
+.opt:hover::after { opacity: 1; }
+.opt:hover:not(:disabled) { transform: translateY(-3px) scale(1.02); border-color: rgba(255,255,255,0.2); box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+.opt:active:not(:disabled) { transform: scale(0.98); }
+.opt-letter {
+  font-family: var(--font-head); font-size: 20px; display: block;
+  opacity: 0.4; margin-bottom: 6px; letter-spacing: 0.05em;
+  transition: opacity 0.2s;
+}
+.opt:hover .opt-letter { opacity: 0.7; }
+.opt-text { font-size: 15px; font-weight: 600; line-height: 1.35; }
+
+.opt.opt-A { --oc: var(--accent); }
+.opt.opt-B { --oc: var(--accent2); }
+.opt.opt-C { --oc: var(--green); }
+.opt.opt-D { --oc: var(--yellow); }
+
+.opt.selected {
+  background: var(--oc) !important; border-color: var(--oc) !important;
+  transform: translateY(-3px) scale(1.03) !important;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.4), 0 0 0 1px var(--oc) !important;
+  color: #fff;
+}
+.opt.selected .opt-letter { opacity: 0.8; }
+.opt.correct {
+  background: rgba(61,232,160,0.18) !important; border-color: var(--green) !important;
+  box-shadow: 0 0 0 1px var(--green), 0 8px 24px rgba(61,232,160,0.2) !important;
+}
+.opt.wrong { opacity: 0.35; transform: scale(0.97) !important; }
+.opt.dimmed { opacity: 0.3; transform: scale(0.98) !important; }
+.opt:disabled { cursor: none; }
+
+/* tf options */
+.tf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 1rem; }
+.tf-opt {
+  padding: 36px 20px; border-radius: var(--r);
+  border: 2px solid var(--border); cursor: none;
+  font-family: var(--font-head); font-size: 32px; text-align: center;
+  background: var(--card); transition: all 0.2s cubic-bezier(0.34,1.26,0.64,1);
+}
+.tf-opt:hover:not(:disabled) { transform: translateY(-4px); border-color: rgba(255,255,255,0.25); }
+.tf-opt.selected.tf-true { background: rgba(61,232,160,0.18); border-color: var(--green); }
+.tf-opt.selected.tf-false { background: rgba(248,94,123,0.18); border-color: var(--red); }
+
+/* ============================================================
+   TIMER
+============================================================ */
+.timer-wrap { position: relative; width: 82px; height: 82px; flex-shrink: 0; }
+.timer-wrap svg { width: 82px; height: 82px; }
+.timer-track { fill: none; stroke: rgba(255,255,255,0.06); stroke-width: 6; }
+.timer-fill {
+  fill: none; stroke-width: 6;
+  stroke-dasharray: 220; stroke-linecap: round;
+  transform-origin: center; transform: rotate(-90deg);
+  transition: stroke-dashoffset 1s linear, stroke 0.5s ease;
+}
+.timer-val {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-head); font-size: 28px; letter-spacing: 0.02em;
+}
+.timer-wrap.urgent .timer-fill { animation: timerPanic 0.5s ease infinite; }
+@keyframes timerPanic { 0%,100%{filter:drop-shadow(0 0 4px var(--red))} 50%{filter:drop-shadow(0 0 12px var(--red))} }
+
+/* ============================================================
+   PROGRESS BAR
+============================================================ */
+.prog-track { height: 3px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.prog-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.5s cubic-bezier(0.34,1,0.64,1); box-shadow: 0 0 8px var(--accent); }
+
+/* ============================================================
+   LEADERBOARD
+============================================================ */
+#s-lb {
+  background: radial-gradient(ellipse 60% 40% at 50% 0%, rgba(248,212,94,0.07) 0%, transparent 60%);
+}
+.lb-row {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 18px; border-radius: 12px;
+  background: var(--card); border: 1px solid var(--border);
+  margin-bottom: 8px;
+  transition: all 0.4s cubic-bezier(0.34,1.26,0.64,1);
+  position: relative; overflow: hidden;
+}
+.lb-row::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--accent); transform: scaleY(0);
+  transition: transform 0.4s cubic-bezier(0.34,1.26,0.64,1);
+}
+.lb-row:hover::before { transform: scaleY(1); }
+.lb-row.me { border-color: rgba(248,94,123,0.3); background: rgba(248,94,123,0.06); }
+.lb-row.me::before { background: var(--red); transform: scaleY(1); }
+.lb-rank { font-family: var(--font-head); font-size: 22px; width: 32px; text-align: center; }
+.lb-rank.gold { color: var(--yellow); text-shadow: 0 0 16px rgba(248,212,94,0.6); }
+.lb-rank.silver { color: #b0b8cc; }
+.lb-rank.bronze { color: #c8905a; }
+.lb-name { flex: 1; font-weight: 600; font-size: 15px; }
+.lb-score { font-family: var(--font-head); font-size: 22px; color: var(--accent); }
+.lb-row-enter { animation: lbRowIn 0.5s cubic-bezier(0.34,1.26,0.64,1) forwards; opacity: 0; }
+@keyframes lbRowIn { from { opacity:0; transform:translateX(-24px); } to { opacity:1; transform:translateX(0); } }
+
+/* ============================================================
+   FEEDBACK CARD
+============================================================ */
+.feedback-card {
+  border-radius: var(--r); padding: 28px 24px; text-align: center;
+  margin-top: 1.5rem;
+  animation: feedbackPop 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards;
+}
+@keyframes feedbackPop { from{transform:scale(0.7);opacity:0} to{transform:scale(1);opacity:1} }
+.feedback-card.correct-fb { background: rgba(61,232,160,0.1); border: 1.5px solid rgba(61,232,160,0.35); }
+.feedback-card.wrong-fb   { background: rgba(248,94,123,0.1); border: 1.5px solid rgba(248,94,123,0.3); }
+.feedback-card.timeout-fb { background: rgba(248,212,94,0.1); border: 1.5px solid rgba(248,212,94,0.3); }
+.feedback-card.poll-fb    { background: rgba(123,94,248,0.1); border: 1.5px solid rgba(123,94,248,0.3); }
+.feedback-icon { font-size: 52px; display: block; margin-bottom: 10px; animation: iconBounce 0.6s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+@keyframes iconBounce { from{transform:scale(0) rotate(-20deg)} to{transform:scale(1) rotate(0)} }
+.feedback-head { font-family: var(--font-head); font-size: 36px; letter-spacing: 0.04em; margin-bottom: 6px; }
+.feedback-pts { font-size: 17px; font-weight: 700; }
+
+/* ============================================================
+   ANALYTICS SCREEN
+============================================================ */
+#s-analytics {
+  background: radial-gradient(ellipse 70% 40% at 30% 80%, rgba(94,184,248,0.06) 0%, transparent 60%);
+}
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(130px,1fr)); gap: 10px; margin-bottom: 1.5rem; }
+.stat-box {
+  background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+  padding: 16px; text-align: center;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.stat-box:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.25); }
+.stat-val { font-family: var(--font-head); font-size: 34px; line-height: 1; }
+.stat-label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-top: 4px; }
+.q-stat-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px; background: var(--card); border: 1px solid var(--border);
+  border-radius: 10px; margin-bottom: 8px;
+  transition: border-color 0.2s;
+}
+.q-stat-row:hover { border-color: rgba(123,94,248,0.3); }
+.q-stat-pct { font-family: var(--font-head); font-size: 22px; width: 54px; flex-shrink: 0; }
+.q-stat-bar { flex: 1; height: 6px; background: var(--border); border-radius: 4px; overflow: hidden; }
+.q-stat-fill { height: 100%; border-radius: 4px; transition: width 1.2s cubic-bezier(0.34,1,0.64,1); }
+.q-stat-txt { font-size: 13px; font-weight: 500; flex: 2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ============================================================
+   PLAYER WAIT
+============================================================ */
+#s-wait {
+  justify-content: center; align-items: center; text-align: center;
+  background: radial-gradient(ellipse 50% 50% at 50% 50%, rgba(123,94,248,0.08) 0%, transparent 70%);
+}
+.wait-spinner {
+  width: 56px; height: 56px; border-radius: 50%;
+  border: 3px solid var(--border); border-top-color: var(--accent);
+  animation: spin 0.9s linear infinite; margin: 0 auto 1.5rem;
+  box-shadow: 0 0 20px rgba(123,94,248,0.2);
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ============================================================
+   SCROLL
+============================================================ */
+.scroll { overflow-y: auto; flex: 1; }
+.scroll::-webkit-scrollbar { width: 3px; }
+.scroll::-webkit-scrollbar-thumb { background: rgba(123,94,248,0.3); border-radius: 3px; }
+
+/* ============================================================
+   MISC HELPERS
+============================================================ */
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.gap-1 { gap: 1rem; }
+.gap-2 { gap: 0.5rem; }
+.flex-1 { flex: 1; }
+.mt-1 { margin-top: 1rem; }
+.mt-2 { margin-top: 0.5rem; }
+.mb-1 { margin-bottom: 1rem; }
+.mb-2 { margin-bottom: 0.5rem; }
+.text-center { text-align: center; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.bold { font-weight: 700; }
+.divider { height: 1px; background: var(--border); margin: 0.875rem 0; }
+.relative { position: relative; }
+.z2 { position: relative; z-index: 2; }
+
+/* ============================================================
+   CONFETTI
+============================================================ */
+.confetti-piece {
+  position: fixed; width: 8px; height: 8px; border-radius: 2px;
+  pointer-events: none; z-index: 8000;
+  animation: confettiFall 1.4s ease-in forwards;
+}
+@keyframes confettiFall {
+  0%   { transform: translateY(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(400px) rotate(720deg); opacity: 0; }
+}
+
+/* ============================================================
+   SCORE ANIMATION
+============================================================ */
+.score-counter {
+  font-family: var(--font-head); font-size: 48px; color: var(--accent);
+  display: inline-block;
+  animation: scoreCount 0.6s ease forwards;
+}
+@keyframes scoreCount { from{transform:scale(1.4);color:var(--green)} to{transform:scale(1);color:var(--accent)} }
+
+/* ============================================================
+   QUESTION TYPE BADGE
+============================================================ */
+.type-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 4px 12px; border-radius: 100px;
+  background: var(--card); border: 1px solid var(--border);
+  margin-bottom: 10px;
+}
+
+/* ============================================================
+   WAITING GRID ANIMATION
+============================================================ */
+.waiting-grid { display: flex; flex-wrap: wrap; min-height: 44px; }
+
+/* background orbs */
+.orb {
+  position: absolute; border-radius: 50%; pointer-events: none; z-index: 0;
+  filter: blur(80px); opacity: 0; animation: orbFloat var(--t, 8s) ease-in-out var(--d, 0s) infinite;
+}
+@keyframes orbFloat {
+  0%,100% { opacity: 0.06; transform: translate(0,0) scale(1); }
+  50%      { opacity: 0.12; transform: translate(var(--dx,20px), var(--dy,-30px)) scale(1.15); }
+}
+
+
+/* ============================================================
+   AI ASSISTANT SCREEN — CINEMATIC REDESIGN
+============================================================ */
+#s-ai {
+  flex-direction: row;
+  padding: 0 !important;
+  overflow: hidden;
+  background: #07060f;
+}
+
+/* ── Animated mesh background on AI screen ── */
+#s-ai::before {
+  content: '';
+  position: absolute; inset: 0; z-index: 0;
+  background:
+    radial-gradient(ellipse 60% 50% at 20% 50%, rgba(123,94,248,0.08) 0%, transparent 70%),
+    radial-gradient(ellipse 50% 40% at 80% 30%, rgba(168,85,247,0.06) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 60% at 60% 80%, rgba(61,232,160,0.04) 0%, transparent 60%);
+  pointer-events: none;
+}
+/* flowing grid lines */
+#s-ai::after {
+  content:'';
+  position:absolute; inset:0; z-index:0; pointer-events:none;
+  background-image: linear-gradient(rgba(123,94,248,0.04) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(123,94,248,0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+  animation: gridShift 20s linear infinite;
+}
+@keyframes gridShift { from{background-position:0 0} to{background-position:40px 40px} }
+
+/* ── Chat Panel (left) ── */
+.ai-chat-panel {
+  width: 400px; min-width: 340px;
+  display: flex; flex-direction: column;
+  background: rgba(18,17,26,0.92);
+  border-right: 1px solid rgba(123,94,248,0.15);
+  position: relative; z-index: 2; flex-shrink: 0;
+  backdrop-filter: blur(20px);
+}
+
+/* ── AI ORB HEADER ── */
+.ai-chat-header {
+  padding: 1.25rem 1.25rem 1rem;
+  border-bottom: 1px solid rgba(123,94,248,0.1);
+  display: flex; align-items: center; gap: 14px;
+  background: linear-gradient(180deg, rgba(123,94,248,0.1) 0%, transparent 100%);
+  flex-shrink: 0; position: relative; overflow: hidden;
+}
+.ai-chat-header::before {
+  content:''; position:absolute; top:-30px; left:-30px;
+  width:120px; height:120px; border-radius:50%;
+  background: radial-gradient(circle, rgba(123,94,248,0.15) 0%, transparent 70%);
+  pointer-events:none;
+}
+
+/* ── AI ORB AVATAR ── */
+.ai-avatar {
+  width: 46px; height: 46px; border-radius: 50%; flex-shrink: 0;
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+}
+.ai-orb-core {
+  position: absolute; inset: 4px; border-radius: 50%;
+  background: conic-gradient(from 0deg, var(--accent), #a855f7, #ec4899, var(--accent2), var(--accent));
+  animation: orbSpin 4s linear infinite;
+  filter: blur(1px);
+}
+.ai-orb-inner {
+  position: relative; z-index: 2;
+  width: 34px; height: 34px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #2a2040, #12111a);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; box-shadow: inset 0 0 12px rgba(123,94,248,0.3);
+}
+.ai-orb-ring {
+  position: absolute; inset: 0; border-radius: 50%;
+  border: 1.5px solid transparent;
+  background: linear-gradient(#07060f, #07060f) padding-box,
+              conic-gradient(from 0deg, var(--accent), transparent, var(--accent)) border-box;
+  animation: orbSpin 3s linear infinite reverse;
+}
+@keyframes orbSpin { to { transform: rotate(360deg); } }
+
+/* thinking state: orb pulses faster */
+.ai-avatar.thinking .ai-orb-core { animation-duration: 1s; }
+.ai-avatar.thinking .ai-orb-inner { box-shadow: inset 0 0 20px rgba(123,94,248,0.6), 0 0 20px rgba(123,94,248,0.3); }
+
+/* ── waveform (shown while generating) ── */
+.ai-waveform {
+  display: none; align-items: center; gap: 3px; height: 20px;
+}
+.ai-waveform.active { display: flex; }
+.wave-bar {
+  width: 3px; border-radius: 3px;
+  background: linear-gradient(180deg, var(--accent), #a855f7);
+  animation: wavePulse 1s ease infinite;
+}
+.wave-bar:nth-child(1){height:8px;animation-delay:0s}
+.wave-bar:nth-child(2){height:16px;animation-delay:0.1s}
+.wave-bar:nth-child(3){height:12px;animation-delay:0.2s}
+.wave-bar:nth-child(4){height:20px;animation-delay:0.3s}
+.wave-bar:nth-child(5){height:14px;animation-delay:0.4s}
+.wave-bar:nth-child(6){height:18px;animation-delay:0.15s}
+.wave-bar:nth-child(7){height:10px;animation-delay:0.35s}
+@keyframes wavePulse {
+  0%,100%{transform:scaleY(0.4);opacity:0.5}
+  50%{transform:scaleY(1);opacity:1}
+}
+
+.ai-name { font-weight:800; font-size:15px; letter-spacing:0.02em; }
+.ai-name span { 
+  background: linear-gradient(90deg, var(--accent), #a855f7);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.ai-status {
+  font-size:11px; color:var(--green); display:flex; align-items:center; gap:5px;
+  font-weight:600; letter-spacing:0.05em; text-transform:uppercase;
+}
+.ai-status-dot {
+  width:6px; height:6px; border-radius:50%; background:var(--green);
+  animation: statusBlink 2s ease infinite;
+}
+@keyframes statusBlink { 0%,100%{opacity:1;box-shadow:0 0 4px var(--green)} 50%{opacity:0.4;box-shadow:none} }
+
+/* ── MESSAGES ── */
+.ai-messages {
+  flex: 1; overflow-y: auto; padding: 1.25rem;
+  display: flex; flex-direction: column; gap: 14px;
+  scroll-behavior: smooth;
+}
+.ai-messages::-webkit-scrollbar { width: 3px; }
+.ai-messages::-webkit-scrollbar-thumb { background: rgba(123,94,248,0.2); border-radius: 3px; }
+
+.msg {
+  display: flex; gap: 10px; max-width: 96%;
+  animation: msgSlideIn 0.35s cubic-bezier(0.34,1.26,0.64,1);
+}
+@keyframes msgSlideIn {
+  from{transform:translateY(16px) scale(0.94);opacity:0}
+  to{transform:translateY(0) scale(1);opacity:1}
+}
+.msg.user { align-self: flex-end; flex-direction: row-reverse; }
+
+.msg-bubble {
+  padding: 11px 15px; border-radius: 18px; font-size: 14px; line-height: 1.6;
+  position: relative;
+}
+.msg.ai .msg-bubble {
+  background: rgba(26,25,39,0.9);
+  border: 1px solid rgba(123,94,248,0.15);
+  border-radius: 4px 18px 18px 18px;
+  color: var(--text);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+/* shimmer effect on AI bubbles */
+.msg.ai .msg-bubble::before {
+  content:''; position:absolute; top:0; left:0; right:0; height:1px;
+  background: linear-gradient(90deg, transparent, rgba(123,94,248,0.3), transparent);
+  border-radius:18px 18px 0 0;
+}
+.msg.user .msg-bubble {
+  background: linear-gradient(135deg, var(--accent) 0%, #a855f7 100%);
+  border-radius: 18px 4px 18px 18px;
+  color: #fff; font-weight: 500;
+  box-shadow: 0 4px 20px rgba(123,94,248,0.35);
+}
+
+.msg-avatar {
+  width: 30px; height: 30px; border-radius: 10px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; font-size: 13px;
+  align-self: flex-end; margin-bottom: 2px;
+}
+.msg.ai .msg-avatar {
+  background: conic-gradient(from 0deg, var(--accent), #a855f7, var(--accent));
+  animation: orbSpin 6s linear infinite;
+  border-radius: 50%;
+  font-size: 12px;
+}
+.msg.user .msg-avatar { background: var(--card); border: 1px solid var(--border); font-size:11px; border-radius:50%; }
+
+/* ── TYPING INDICATOR ── */
+.typing-dots { display:flex; gap:5px; align-items:center; padding:5px 2px; }
+.typing-dots span {
+  width:8px; height:8px; border-radius:50%;
+  background: linear-gradient(135deg, var(--accent), #a855f7);
+  animation:tdot 1.4s ease infinite;
+}
+.typing-dots span:nth-child(2){animation-delay:0.2s}
+.typing-dots span:nth-child(3){animation-delay:0.4s}
+@keyframes tdot{0%,60%,100%{transform:scale(0.5) translateY(0);opacity:0.3}30%{transform:scale(1) translateY(-5px);opacity:1}}
+
+/* ── STREAMING TEXT cursor ── */
+.stream-cursor {
+  display:inline-block; width:2px; height:14px; background:var(--accent);
+  margin-left:2px; vertical-align:middle;
+  animation: blinkCursor 0.7s step-end infinite;
+}
+@keyframes blinkCursor{0%,100%{opacity:1}50%{opacity:0}}
+
+/* ── QUICK CHIPS (enhanced) ── */
+.quick-chips { display:flex; flex-wrap:wrap; gap:7px; margin-top:10px; }
+.qchip {
+  background: rgba(123,94,248,0.08);
+  border: 1px solid rgba(123,94,248,0.22);
+  color: #c4b5fd;
+  border-radius: 100px;
+  padding: 6px 14px;
+  font-size: 12px; font-weight: 600;
+  cursor: none;
+  transition: all 0.2s cubic-bezier(0.34,1.26,0.64,1);
+  position: relative; overflow: hidden;
+}
+.qchip::before {
+  content:''; position:absolute; inset:0;
+  background: linear-gradient(135deg, rgba(123,94,248,0.15), transparent);
+  transform:translateX(-100%); transition:transform 0.3s;
+}
+.qchip:hover { 
+  background:rgba(123,94,248,0.2); border-color:var(--accent);
+  transform:translateY(-2px) scale(1.04);
+  box-shadow: 0 4px 16px rgba(123,94,248,0.25);
+  color:#fff;
+}
+.qchip:hover::before { transform:translateX(0); }
+
+/* ── SUGGESTED PROMPTS (initial state, grid) ── */
+.ai-suggestions {
+  padding: .5rem 1.25rem 1rem;
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 7px; flex-shrink: 0;
+}
+.ai-sug-card {
+  background: rgba(123,94,248,0.06);
+  border: 1px solid rgba(123,94,248,0.14);
+  border-radius: 12px; padding: 10px 12px;
+  cursor: none; text-align: left;
+  transition: all 0.2s cubic-bezier(0.34,1.26,0.64,1);
+  animation: sugIn 0.5s cubic-bezier(0.34,1.26,0.64,1) both;
+}
+.ai-sug-card:nth-child(1){animation-delay:0.05s}
+.ai-sug-card:nth-child(2){animation-delay:0.12s}
+.ai-sug-card:nth-child(3){animation-delay:0.19s}
+.ai-sug-card:nth-child(4){animation-delay:0.26s}
+.ai-sug-card:nth-child(5){animation-delay:0.33s}
+.ai-sug-card:nth-child(6){animation-delay:0.40s}
+@keyframes sugIn { from{transform:translateY(10px) scale(0.94);opacity:0} }
+.ai-sug-card:hover {
+  background:rgba(123,94,248,0.14); border-color:rgba(123,94,248,0.4);
+  transform:translateY(-2px) scale(1.02);
+  box-shadow:0 6px 20px rgba(123,94,248,0.15);
+}
+.sug-emoji { font-size:18px; margin-bottom:4px; display:block; }
+.sug-title { font-size:12px; font-weight:700; color:var(--text); display:block; }
+.sug-sub { font-size:10px; color:var(--muted); margin-top:2px; display:block; }
+
+/* ── INPUT ROW ── */
+.ai-input-row {
+  padding: 1rem 1.25rem 1.25rem;
+  border-top: 1px solid rgba(123,94,248,0.1);
+  display: flex; gap: 10px; align-items: flex-end;
+  flex-shrink: 0;
+  background: rgba(12,11,20,0.95);
+  backdrop-filter: blur(12px);
+}
+.ai-input-wrap {
+  flex: 1; position: relative;
+  background: rgba(26,25,39,0.8);
+  border: 1.5px solid rgba(123,94,248,0.18);
+  border-radius: 16px;
+  transition: border-color 0.25s, box-shadow 0.25s;
+  display: flex; align-items: flex-end;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+}
+.ai-input-wrap:focus-within {
+  border-color: rgba(123,94,248,0.55);
+  box-shadow: 0 0 0 3px rgba(123,94,248,0.1), 0 4px 20px rgba(0,0,0,0.4);
+}
+.ai-textarea {
+  width:100%; background:none; border:none; outline:none; color:var(--text);
+  font-family:var(--font-body); font-size:14px; line-height:1.5;
+  padding:12px 48px 12px 16px; resize:none; max-height:120px;
+  overflow-y:auto;
+}
+.ai-textarea::placeholder { color:rgba(240,238,255,0.28); }
+.ai-send-btn {
+  position:absolute; right:8px; bottom:8px;
+  width:34px; height:34px; border-radius:10px;
+  background: linear-gradient(135deg, var(--accent), #a855f7);
+  border:none; cursor:none; color:#fff; font-size:15px;
+  display:flex; align-items:center; justify-content:center;
+  transition: transform 0.2s, opacity 0.2s, box-shadow 0.2s;
+  box-shadow: 0 2px 10px rgba(123,94,248,0.4);
+}
+.ai-send-btn:hover { transform:scale(1.12); box-shadow:0 4px 18px rgba(123,94,248,0.6); }
+.ai-send-btn:disabled { opacity:0.35; transform:none; box-shadow:none; }
+.ai-send-btn.active { animation: sendPop 0.2s cubic-bezier(0.34,1.8,0.64,1); }
+@keyframes sendPop { from{transform:scale(1.3)} to{transform:scale(1)} }
+
+/* ── SLIDES PANEL (right) ── */
+.ai-slides-panel {
+  flex: 1; display: flex; flex-direction: column; overflow: hidden;
+  background: rgba(10,9,16,0.6); backdrop-filter: blur(8px);
+}
+.ai-slides-toolbar {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid rgba(123,94,248,0.1);
+  display: flex; align-items: center; gap: 10px;
+  flex-shrink: 0;
+  background: rgba(18,17,26,0.8); backdrop-filter: blur(12px);
+}
+.slides-count-chip {
+  background:rgba(123,94,248,0.12); border:1px solid rgba(123,94,248,0.25);
+  color:#c4b5fd; border-radius:100px; padding:3px 12px; font-size:12px; font-weight:700;
+}
+.ai-slides-scroll {
+  flex: 1; overflow-y: auto; padding: 1.25rem; display: flex; flex-direction: column; gap: 14px;
+}
+.ai-slides-scroll::-webkit-scrollbar { width: 3px; }
+.ai-slides-scroll::-webkit-scrollbar-thumb { background:rgba(123,94,248,0.2); border-radius:3px; }
+
+/* ── SLIDE CARD ── */
+.slide-card {
+  background: rgba(26,25,39,0.85);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 16px;
+  padding: 1.25rem; position: relative;
+  transition: border-color 0.25s, transform 0.2s, box-shadow 0.25s;
+  animation: slideCardIn 0.45s cubic-bezier(0.34,1.26,0.64,1) both;
+  backdrop-filter: blur(8px);
+}
+@keyframes slideCardIn {
+  from{transform:translateY(24px) scale(0.96);opacity:0}
+}
+.slide-card:hover {
+  border-color:rgba(123,94,248,0.3);
+  box-shadow: 0 8px 32px rgba(123,94,248,0.1), 0 2px 8px rgba(0,0,0,0.4);
+  transform: translateY(-1px);
+}
+.slide-card.editing { border-color:var(--accent); box-shadow:0 0 0 2px rgba(123,94,248,0.2); }
+.slide-card::before {
+  content:''; position:absolute; top:0; left:20%; right:20%; height:1px;
+  background:linear-gradient(90deg,transparent,rgba(123,94,248,0.2),transparent);
+}
+
+.slide-num {
+  position:absolute; top:-10px; left:16px;
+  background:linear-gradient(90deg, var(--accent), #a855f7);
+  color:#fff; font-family:var(--font-head);
+  font-size:12px; padding:2px 11px; border-radius:100px; letter-spacing:0.07em;
+  box-shadow: 0 2px 8px rgba(123,94,248,0.4);
+}
+.slide-type-badge {
+  position:absolute; top:.875rem; right:.875rem;
+  font-size:11px; font-weight:700; letter-spacing:0.07em; padding:3px 9px; border-radius:100px;
+  text-transform:uppercase;
+}
+.badge-mcq  { background:rgba(123,94,248,0.15); color:#c4b5fd; border:1px solid rgba(123,94,248,0.2); }
+.badge-tf   { background:rgba(61,232,160,0.1); color:var(--green); border:1px solid rgba(61,232,160,0.2); }
+.badge-poll { background:rgba(248,152,94,0.1); color:var(--accent2); border:1px solid rgba(248,152,94,0.2); }
+
+.slide-q {
+  font-weight:700; font-size:15px; margin-top:.5rem; margin-bottom:1rem;
+  padding-right:80px;
+  border: none; background:none; color:var(--text); font-family:var(--font-body);
+  width:100%; resize:none; outline:none; line-height:1.5;
+}
+.slide-q:focus { background:rgba(255,255,255,0.03); border-radius:8px; padding:6px 80px 6px 6px; }
+
+.slide-opts-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap:8px; margin-bottom:.875rem;
+}
+.slide-opt {
+  display:flex; align-items:center; gap:8px;
+  padding:9px 11px; border-radius:12px; border:1px solid rgba(255,255,255,0.06);
+  background:rgba(255,255,255,0.02); position:relative;
+  transition: all 0.2s;
+}
+.slide-opt.correct-opt {
+  border-color:rgba(61,232,160,0.35); background:rgba(61,232,160,0.05);
+}
+.opt-letter {
+  width:24px; height:24px; border-radius:7px; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center;
+  font-size:11px; font-weight:800; font-family:var(--font-head); letter-spacing:0.05em;
+  background:rgba(255,255,255,0.06); color:var(--muted);
+}
+.correct-opt .opt-letter { background:var(--green); color:#0a0910; }
+.opt-input {
+  flex:1; background:none; border:none; outline:none; color:var(--text);
+  font-size:13px; font-family:var(--font-body); cursor:none;
+}
+.opt-input:focus { cursor:text; }
+.correct-mark-btn {
+  margin-left:auto; background:none; border:none; cursor:none; color:var(--muted);
+  font-size:15px; padding:2px; transition: all 0.2s;
+  flex-shrink:0;
+}
+.correct-mark-btn:hover { color:var(--green); transform:scale(1.25) rotate(15deg); }
+.correct-opt .correct-mark-btn { color:var(--green); }
+
+.slide-meta-row {
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+}
+.slide-meta-input {
+  background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06); color:var(--text);
+  font-size:12px; border-radius:8px; padding:5px 10px; font-family:var(--font-body);
+  width:70px; outline:none; transition:border-color 0.2s; cursor:none;
+}
+.slide-meta-input:focus { border-color:rgba(123,94,248,0.4); cursor:text; }
+.slide-actions { display:flex; gap:6px; margin-left:auto; }
+.slide-del-btn {
+  background:none; border:1px solid rgba(248,94,123,0.2); color:var(--red);
+  border-radius:8px; padding:4px 10px; font-size:12px; cursor:none; transition: all 0.2s;
+}
+.slide-del-btn:hover { background:rgba(248,94,123,0.1); border-color:var(--red); transform:scale(1.04); }
+
+/* ── EMPTY STATE — animated ── */
+.slides-empty {
+  flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  color:var(--muted); text-align:center; gap:14px; padding:2rem;
+}
+.slides-empty-orb {
+  width:80px; height:80px; border-radius:50%; position:relative;
+  margin-bottom:8px;
+}
+.slides-empty-orb::before {
+  content:''; position:absolute; inset:0; border-radius:50%;
+  background: conic-gradient(from 0deg, var(--accent), transparent 120deg, transparent);
+  animation: orbSpin 3s linear infinite;
+  opacity:0.3;
+}
+.slides-empty-orb::after {
+  content:''; position:absolute; inset:12px; border-radius:50%;
+  background: radial-gradient(circle, rgba(123,94,248,0.15), transparent);
+  border:1px solid rgba(123,94,248,0.2);
+}
+.empty-symbol {
+  position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  font-size:28px; z-index:1; opacity:0.5;
+}
+.slides-empty-title {
+  font-family:var(--font-head); font-size:22px; letter-spacing:0.08em;
+  background:linear-gradient(90deg, var(--muted), rgba(240,238,255,0.6));
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+}
+.slides-empty-sub { font-size:13px; max-width:260px; line-height:1.7; }
+
+/* ── PROGRESS BAR ── */
+.gen-progress {
+  height:2px; background:rgba(255,255,255,0.05); border-radius:2px; overflow:hidden;
+  margin:8px 1.25rem 0; display:none; flex-shrink:0;
+}
+.gen-progress-bar {
+  height:100%;
+  background:linear-gradient(90deg, var(--accent), #a855f7, var(--accent2));
+  background-size:200%;
+  border-radius:2px; width:0%;
+  transition:width 0.5s ease;
+  animation: barShimmer 1.5s linear infinite;
+}
+@keyframes barShimmer { from{background-position:0%} to{background-position:200%} }
+
+/* ── USE QUIZ BUTTON ── */
+.back-create-btn {
+  background:linear-gradient(135deg, var(--accent), #a855f7);
+  color:#fff; border:none; border-radius:12px; padding:8px 18px;
+  font-size:13px; font-weight:700; cursor:none; margin-left:auto;
+  transition: all 0.2s;
+  box-shadow: 0 4px 16px rgba(123,94,248,0.4);
+}
+.back-create-btn:hover { opacity:0.88; transform:translateY(-2px); box-shadow:0 8px 24px rgba(123,94,248,0.5); }
+
+/* ── FLOATING AI BUTTON (on other screens) ── */
+.ai-float-btn {
+  position: fixed; bottom: 1.5rem; right: 1.5rem;
+  width: 54px; height: 54px; border-radius: 50%;
+  background: conic-gradient(from 0deg, var(--accent), #a855f7, var(--accent));
+  border: none; cursor: none; z-index: 400;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 24px rgba(123,94,248,0.5), 0 0 0 0 rgba(123,94,248,0.4);
+  transition: transform 0.2s, box-shadow 0.2s;
+  animation: floatPulse 3s ease infinite, orbSpin 6s linear infinite;
+}
+.ai-float-btn:hover {
+  transform: scale(1.12);
+  box-shadow: 0 8px 32px rgba(123,94,248,0.7), 0 0 0 8px rgba(123,94,248,0.1);
+}
+@keyframes floatPulse {
+  0%,100%{box-shadow:0 4px 24px rgba(123,94,248,0.5),0 0 0 0 rgba(123,94,248,0.4)}
+  50%{box-shadow:0 4px 24px rgba(123,94,248,0.5),0 0 0 12px rgba(123,94,248,0)}
+}
+.ai-float-btn .fab-icon {
+  position:relative; z-index:1;
+  width:44px; height:44px; border-radius:50%;
+  background:radial-gradient(circle at 35% 35%, #2a2040, #0d0c18);
+  display:flex; align-items:center; justify-content:center;
+  font-size:20px;
+}
+.ai-float-tooltip {
+  position:absolute; right:64px; top:50%; transform:translateY(-50%);
+  background:var(--card); border:1px solid var(--border); border-radius:10px;
+  padding:6px 12px; font-size:12px; font-weight:700; white-space:nowrap;
+  opacity:0; transition:opacity 0.2s, transform 0.2s;
+  pointer-events:none; transform:translateY(-50%) translateX(8px);
+}
+.ai-float-btn:hover .ai-float-tooltip { opacity:1; transform:translateY(-50%) translateX(0); }
+@media(max-width:600px) {
+  .opt-grid, .tf-grid, .grid2 { grid-template-columns: 1fr 1fr; }
+  .land-title { font-size: 52px; }
+  .game-code { font-size: 52px; }
+}
+
+/* ============================================================
+   AUTH SCREENS
+============================================================ */
+#s-login, #s-signup {
+  justify-content: center; align-items: center;
+  background: radial-gradient(ellipse 70% 60% at 50% 0%, rgba(123,94,248,0.14) 0%, transparent 70%);
+}
+.auth-box {
+  width: 100%; max-width: 440px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 2.5rem;
+  position: relative; z-index: 2;
+  box-shadow: 0 32px 80px rgba(0,0,0,0.5);
+  animation: authBoxIn 0.5s cubic-bezier(0.34,1.26,0.64,1);
+}
+@keyframes authBoxIn { from{transform:translateY(32px) scale(0.96);opacity:0} to{transform:translateY(0) scale(1);opacity:1} }
+.auth-box::before {
+  content:'';position:absolute;top:0;left:10%;right:10%;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(123,94,248,0.5),transparent);
+}
+.auth-title {
+  font-family:var(--font-head); font-size:36px; letter-spacing:0.04em;
+  margin-bottom:.375rem;
+}
+.auth-sub { color:var(--muted); font-size:14px; margin-bottom:1.75rem; }
+.auth-form { display:flex; flex-direction:column; gap:.875rem; }
+.input-group { position:relative; }
+.input-group input { padding-left:42px; }
+.input-icon {
+  position:absolute; left:13px; top:50%; transform:translateY(-50%);
+  font-size:16px; pointer-events:none; opacity:0.5;
+}
+.input-group input:focus ~ .input-focus-line,
+.input-group:focus-within .input-focus-line {
+  transform: scaleX(1);
+}
+.input-focus-line {
+  position:absolute; bottom:0; left:0; right:0; height:2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  border-radius:0 0 12px 12px;
+  transform:scaleX(0); transform-origin:left;
+  transition:transform 0.3s cubic-bezier(0.34,1,0.64,1);
+}
+.auth-divider {
+  display:flex; align-items:center; gap:12px; margin:.5rem 0;
+  color:var(--muted); font-size:13px;
+}
+.auth-divider::before,.auth-divider::after {
+  content:''; flex:1; height:1px; background:var(--border);
+}
+.auth-link { color:var(--accent); cursor:none; font-weight:700; text-decoration:none; transition:opacity 0.2s; }
+.auth-link:hover { opacity:0.7; }
+.auth-footer { text-align:center; margin-top:1.25rem; font-size:14px; color:var(--muted); }
+.password-toggle {
+  position:absolute; right:13px; top:50%; transform:translateY(-50%);
+  background:none; border:none; cursor:none; color:var(--muted); font-size:15px;
+  transition:color 0.2s; padding:4px;
+}
+.password-toggle:hover { color:var(--text); }
+.strength-bar { display:flex; gap:4px; margin-top:6px; }
+.strength-seg {
+  flex:1; height:3px; border-radius:3px; background:var(--border);
+  transition:background 0.3s;
+}
+.strength-seg.weak  { background: var(--red); }
+.strength-seg.fair  { background: var(--yellow); }
+.strength-seg.good  { background: var(--accent2); }
+.strength-seg.strong{ background: var(--green); }
+.strength-label { font-size:11px; font-weight:700; margin-top:4px; letter-spacing:0.06em; text-transform:uppercase; }
+
+/* avatar ring */
+.avatar {
+  width:40px; height:40px; border-radius:50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  display:flex; align-items:center; justify-content:center;
+  font-family:var(--font-head); font-size:16px; font-weight:700; color:#fff;
+  cursor:none; flex-shrink:0; position:relative;
+  transition:transform 0.2s, box-shadow 0.2s;
+}
+.avatar:hover { transform:scale(1.08); box-shadow:0 0 0 3px rgba(123,94,248,0.4); }
+.avatar-sm { width:32px; height:32px; font-size:13px; }
+.avatar-online::after {
+  content:''; position:absolute; bottom:1px; right:1px;
+  width:9px; height:9px; border-radius:50%;
+  background:var(--green); border:2px solid var(--bg);
+}
+
+/* auth error/success message */
+.auth-msg {
+  padding:10px 14px; border-radius:10px; font-size:13px; font-weight:600;
+  margin-bottom:.75rem; display:none;
+  animation:msgIn 0.3s ease;
+}
+@keyframes msgIn { from{transform:translateY(-8px);opacity:0} to{transform:translateY(0);opacity:1} }
+.auth-msg.err  { background:rgba(248,94,123,0.12); border:1px solid rgba(248,94,123,0.3); color:var(--red); display:flex; align-items:center; gap:8px; }
+.auth-msg.ok   { background:rgba(61,232,160,0.1); border:1px solid rgba(61,232,160,0.3); color:var(--green); display:flex; align-items:center; gap:8px; }
+
+/* shake on error */
+@keyframes shake { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-6px)} 40%,80%{transform:translateX(6px)} }
+.shake { animation:shake 0.4s ease; }
+
+/* ============================================================
+   PROFILE SCREEN
+============================================================ */
+#s-profile {
+  background: radial-gradient(ellipse 50% 40% at 80% 20%, rgba(248,152,94,0.08) 0%, transparent 60%);
+}
+.profile-hero {
+  display:flex; align-items:center; gap:1.25rem; margin-bottom:2rem; position:relative; z-index:2;
+}
+.profile-avatar-big {
+  width:72px; height:72px; border-radius:50%;
+  background:linear-gradient(135deg, var(--accent), var(--accent2));
+  display:flex; align-items:center; justify-content:center;
+  font-family:var(--font-head); font-size:28px; color:#fff;
+  box-shadow: 0 0 0 3px rgba(123,94,248,0.25), 0 8px 32px rgba(123,94,248,0.3);
+  flex-shrink:0;
+}
+.quiz-history-card {
+  background:var(--card); border:1px solid var(--border); border-radius:12px;
+  padding:1rem; margin-bottom:8px; cursor:none;
+  transition:border-color 0.2s, transform 0.2s;
+  display:flex; align-items:center; gap:12px;
+}
+.quiz-history-card:hover { border-color:rgba(123,94,248,0.35); transform:translateX(4px); }
+.qh-icon {
+  width:40px; height:40px; border-radius:10px; flex-shrink:0;
+  background:rgba(123,94,248,0.15); display:flex; align-items:center; justify-content:center; font-size:18px;
+}
+.qh-info { flex:1; min-width:0; }
+.qh-title { font-weight:600; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.qh-meta  { font-size:12px; color:var(--muted); margin-top:2px; }
+.qh-score { font-family:var(--font-head); font-size:20px; color:var(--accent); }
+.stat-mini-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:1.5rem; }
+.stat-mini {
+  background:var(--card); border:1px solid var(--border); border-radius:12px;
+  padding:14px; text-align:center;
+}
+.stat-mini-val { font-family:var(--font-head); font-size:26px; line-height:1; }
+.stat-mini-lbl { font-size:11px; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; color:var(--muted); margin-top:3px; }
+
+/* ============================================================
+   GLOBAL NAV BAR (authenticated)
+============================================================ */
+.global-nav {
+  position:fixed; top:0; left:0; right:0; z-index:500;
+  height:56px; display:none; align-items:center; justify-content:space-between;
+  padding:0 1.5rem;
+  background:rgba(10,9,16,0.85);
+  backdrop-filter:blur(16px);
+  border-bottom:1px solid var(--border);
+}
+.global-nav.show { display:flex; }
+.gnav-right { display:flex; align-items:center; gap:10px; }
+
+/* toast notification */
+.toast {
+  position:fixed; bottom:1.5rem; left:50%; transform:translateX(-50%) translateY(20px);
+  background:var(--card); border:1px solid var(--border); border-radius:100px;
+  padding:12px 24px; font-size:14px; font-weight:600;
+  box-shadow:0 8px 32px rgba(0,0,0,0.4);
+  z-index:9999; opacity:0;
+  transition:opacity 0.3s, transform 0.3s;
+  white-space:nowrap; pointer-events:none;
+  display:flex; align-items:center; gap:8px;
+}
+.toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+.toast.t-ok  { border-color:rgba(61,232,160,0.35); color:var(--green); }
+.toast.t-err { border-color:rgba(248,94,123,0.35); color:var(--red); }
+
+/* screens need top padding when global nav is showing */
+body.authed .screen { padding-top:calc(1.5rem + 56px); }
+</style>
+</head>
+<body>
+
+<!-- ── CURSOR ── -->
+<div id="cursor"></div>
+<div id="cursor-ring"></div>
+
+<!-- ── WIPE OVERLAY ── -->
+<div id="wipe"></div>
+
+<!-- ── TOAST ── -->
+<div class="toast" id="toast"></div>
+
+<!-- ── GLOBAL NAV (shown when logged in) ── -->
+<nav class="global-nav" id="global-nav">
+  <div class="logo-mark">
+    <div class="logo-z">Z</div>
+    <div class="logo-txt">APP</div>
+  </div>
+  <div class="gnav-right">
+    <button class="btn btn-ghost btn-sm" onclick="navigate('s-land')" style="border-radius:100px">Home</button>
+    <button class="btn btn-ghost btn-sm" onclick="navigate('s-profile')" style="border-radius:100px">My Quizzes</button>
+    <div class="avatar avatar-sm avatar-online" id="nav-avatar" onclick="navigate('s-profile')">?</div>
+  </div>
+</nav>
+
+<!-- ================================================================
+     LANDING
+================================================================ -->
+<div id="s-land" class="screen">
+  <div class="orb" style="width:400px;height:400px;background:var(--accent);top:-100px;left:-100px;--t:9s;--d:0s;--dx:40px;--dy:30px"></div>
+  <div class="orb" style="width:300px;height:300px;background:var(--accent2);bottom:-80px;right:-80px;--t:11s;--d:2s;--dx:-30px;--dy:-40px"></div>
+
+  <!-- particles -->
+  <div class="particle" style="width:4px;height:4px;left:15%;bottom:20%;--dur:5s;--delay:0s"></div>
+  <div class="particle" style="width:3px;height:3px;left:30%;bottom:10%;--dur:7s;--delay:1.5s;background:var(--accent2)"></div>
+  <div class="particle" style="width:5px;height:5px;left:60%;bottom:15%;--dur:6s;--delay:0.8s;background:var(--green)"></div>
+  <div class="particle" style="width:3px;height:3px;left:80%;bottom:25%;--dur:8s;--delay:2.2s"></div>
+  <div class="particle" style="width:4px;height:4px;left:45%;bottom:8%;--dur:5.5s;--delay:3s;background:var(--yellow)"></div>
+
+  <div class="land-inner z2">
+    <div class="chip chip-accent mb-2 stagger" style="animation-delay:0s">
+      <span>Unlimited players</span>
+    </div>
+
+    <!-- auth bar on landing -->
+    <div id="land-auth-bar" class="stagger" style="animation-delay:0s;display:flex;justify-content:flex-end;gap:8px;margin-bottom:1.5rem"></div>
+
+    <div class="land-title stagger" style="--stagger-delay:0.06s">
+      <div class="reveal-up" style="animation-delay:0.1s">
+        <span>WHERE</span>
+      </div>
+      <div class="reveal-up" style="animation-delay:0.22s">
+        <span>EVERY <em>Q</em></span>
+      </div>
+      <div class="reveal-up" style="animation-delay:0.34s">
+        <span>COUNTS</span>
+      </div>
+    </div>
+
+    <p class="land-sub stagger" style="animation-delay:0.5s;opacity:0">
+      Real-time quiz battles with live leaderboards, speed bonuses, deep analytics — and room for everyone.
+    </p>
+
+    <div class="tab-bar stagger" style="animation-delay:0.62s;opacity:0">
+      <button class="tab-btn active" onclick="setTab('host')">HOST</button>
+      <button class="tab-btn" onclick="setTab('join')">JOIN</button>
+    </div>
+
+    <div id="tab-host" class="stagger" style="animation-delay:0.72s;opacity:0;display:flex;flex-direction:column;gap:10px">
+      <button class="btn btn-primary btn-lg btn-full" onclick="navigate('s-ai')">
+        ✨ Generate with AI
+      </button>
+      <button class="btn btn-ghost btn-full" onclick="navigate('s-create')" style="border-radius:12px">
+        Build Manually →
+      </button>
+    </div>
+
+    <div id="tab-join" style="display:none" class="stagger" style="animation-delay:0.72s;opacity:0">
+      <div class="mb-2"><label>Game Code</label>
+        <input id="join-code" type="text" placeholder="6-DIGIT CODE" maxlength="6"
+          style="font-family:var(--font-head);font-size:28px;text-align:center;letter-spacing:0.2em">
+      </div>
+      <div class="mb-1"><label>Your Name</label><input id="join-name" type="text" placeholder="Enter your name"></div>
+      <button class="btn btn-primary btn-lg btn-full" onclick="joinGame()">Join Game →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================
+     CREATE
+================================================================ -->
+<div id="s-create" class="screen">
+  <div class="orb" style="width:350px;height:350px;background:var(--accent2);top:-60px;right:-60px;--t:10s"></div>
+  <div class="nav z2">
+    <div class="logo-mark">
+      <div class="logo-z">Z</div>
+      <div class="logo-txt">APP</div>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="navigate('s-land')">← Back</button>
+  </div>
+
+  <div class="z2" style="max-width:640px;width:100%;margin:0 auto;flex:1;display:flex;flex-direction:column">
+    <h2 class="reveal-up" style="font-family:var(--font-head);font-size:36px;margin-bottom:1.25rem"><span>BUILD YOUR QUIZ</span></h2>
+
+    <div class="grid2 mb-1 stagger">
+      <div><label>Quiz Title</label><input id="c-title" placeholder="Solar System Challenge"></div>
+      <div><label>Default Timer (sec)</label><input id="c-time" type="number" value="20" min="5" max="120"></div>
+    </div>
+    <div class="grid2 mb-1 stagger">
+      <div><label>Points per Question</label><input id="c-pts" type="number" value="1000" min="100" step="100"></div>
+      <div><label>Speed Bonus</label>
+        <select id="c-speed">
+          <option value="1">On — faster earns more</option>
+          <option value="0">Off — flat points</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="flex items-center justify-between mb-2 stagger">
+      <h3 style="font-family:var(--font-head);font-size:22px;letter-spacing:0.04em">
+        QUESTIONS <span id="q-count-chip" class="chip chip-accent" style="font-size:12px">0</span>
+      </h3>
+      <button class="btn btn-ghost btn-sm" onclick="loadSample()">Load Sample</button>
+    </div>
+
+    <div id="q-list" class="scroll mb-1" style="max-height:220px"></div>
+
+    <!-- ADD FORM -->
+    <div id="q-form" class="q-form">
+      <div class="flex items-center justify-between mb-1">
+        <h3 id="q-form-title" style="font-family:var(--font-head);font-size:18px;letter-spacing:0.04em">ADD QUESTION</h3>
+        <button class="btn btn-ghost btn-sm" onclick="hideForm()">✕</button>
+      </div>
+      <div class="mb-1"><label>Type</label>
+        <select id="q-type" onchange="updateQType()">
+          <option value="mcq">Multiple Choice (4 options)</option>
+          <option value="tf">True / False</option>
+          <option value="poll">Poll (no correct answer)</option>
+        </select>
+      </div>
+      <div class="mb-1"><label>Question</label><textarea id="q-text" placeholder="Type your question here…" style="min-height:70px"></textarea></div>
+      <div id="mcq-section">
+        <div class="grid2 mb-1 gap-sm">
+          <div><label>A</label><input id="qa" placeholder="Option A"></div>
+          <div><label>B</label><input id="qb" placeholder="Option B"></div>
+          <div><label>C</label><input id="qc" placeholder="Option C"></div>
+          <div><label>D</label><input id="qd" placeholder="Option D"></div>
+        </div>
+        <div class="grid2 mb-1 gap-sm">
+          <div><label>Correct Answer</label>
+            <select id="q-correct"><option value="0">A</option><option value="1">B</option><option value="2">C</option><option value="3">D</option></select>
+          </div>
+          <div><label>Timer (sec)</label><input id="q-timer" type="number" value="20" min="5" max="120"></div>
+        </div>
+      </div>
+      <div id="tf-section" style="display:none" class="mb-1">
+        <div class="grid2 gap-sm">
+          <div><label>Correct Answer</label><select id="q-tf"><option value="0">True</option><option value="1">False</option></select></div>
+          <div><label>Timer (sec)</label><input id="q-timer-tf" type="number" value="15" min="5" max="60"></div>
+        </div>
+      </div>
+      <div id="poll-section" style="display:none" class="mb-1">
+        <div class="grid2 mb-1 gap-sm">
+          <div><label>A</label><input id="pqa" placeholder="Option A"></div>
+          <div><label>B</label><input id="pqb" placeholder="Option B"></div>
+          <div><label>C</label><input id="pqc" placeholder="Option C (opt)"></div>
+          <div><label>D</label><input id="pqd" placeholder="Option D (opt)"></div>
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <button class="btn btn-primary" onclick="saveQ()">Save Question</button>
+        <button class="btn btn-ghost" onclick="hideForm()">Cancel</button>
+      </div>
+    </div>
+
+    <button class="btn btn-ghost btn-sm mb-1" onclick="showForm()" style="align-self:flex-start">+ Add Question</button>
+
+    <div style="margin-top:auto;padding-top:1rem">
+      <button class="btn btn-success btn-lg btn-full" onclick="launchLobby()">Launch Quiz →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================
+     LOBBY (HOST)
+================================================================ -->
+<div id="s-lobby" class="screen">
+  <div class="orb" style="width:500px;height:500px;background:var(--green);top:50%;left:50%;transform:translate(-50%,-50%);--t:10s;--dx:0px;--dy:0px"></div>
+  <div class="nav z2">
+    <div class="logo-mark"><div class="logo-z">Z</div><div class="logo-txt">APP</div></div>
+    <div class="chip chip-live">LIVE</div>
+  </div>
+
+  <div class="text-center z2 stagger" style="margin-bottom:1.5rem">
+    <div class="muted small mb-2" style="letter-spacing:0.12em;text-transform:uppercase;font-weight:700">Share this code</div>
+    <div class="game-code" id="disp-code">——</div>
+    <div class="muted small mt-2" id="lobby-sub"></div>
+  </div>
+
+  <div class="card z2 mb-1">
+    <div class="flex items-center justify-between mb-2">
+      <span class="muted small bold" style="text-transform:uppercase;letter-spacing:0.08em">Players</span>
+      <span id="lobby-count" style="font-family:var(--font-head);font-size:32px;color:var(--green)">0</span>
+    </div>
+    <div class="waiting-grid" id="lobby-players" style="min-height:44px"></div>
+  </div>
+
+  <div style="margin-top:auto;position:relative;z-index:2">
+    <button class="btn btn-success btn-lg btn-full" onclick="startGame()">Start Quiz →</button>
+  </div>
+</div>
+
+<!-- ================================================================
+     HOST QUESTION VIEW
+================================================================ -->
+<div id="s-host-q" class="screen">
+  <div class="nav z2">
+    <div class="logo-mark"><div class="logo-z">Z</div><div class="logo-txt">APP</div></div>
+    <div class="flex gap-2 items-center">
+      <span class="muted small" id="h-prog-lbl"></span>
+      <button class="btn btn-danger btn-sm" onclick="if(confirm('End quiz?'))endGame()">End</button>
+    </div>
+  </div>
+  <div class="prog-track mb-1 z2"><div class="prog-fill" id="h-prog-fill"></div></div>
+
+  <div class="flex gap-1 items-center mb-1 relative z2">
+    <div style="flex:1;position:relative">
+      <div class="q-number-huge" id="h-q-num-bg"></div>
+      <div id="h-type-badge" class="type-badge"></div>
+      <h2 id="h-q-text" style="font-family:var(--font-head);font-size:clamp(20px,3vw,32px);letter-spacing:0.02em;line-height:1.2;max-width:560px"></h2>
+    </div>
+    <div class="timer-wrap" id="h-timer-wrap">
+      <svg viewBox="0 0 82 82"><circle class="timer-track" cx="41" cy="41" r="35"/><circle class="timer-fill" id="h-timer-c" cx="41" cy="41" r="35" stroke="var(--accent)"/></svg>
+      <div class="timer-val" id="h-timer-n">—</div>
+    </div>
+  </div>
+
+  <div id="h-opts-display" class="z2"></div>
+
+  <div class="divider z2"></div>
+  <div id="h-bars" class="ans-bar-wrap z2 mb-1"></div>
+
+  <div class="flex gap-2 z2" style="margin-top:auto">
+    <div class="card" style="flex:1;text-align:center;padding:.875rem">
+      <div class="stat-val" id="h-answered" style="font-family:var(--font-head);font-size:28px">0</div>
+      <div class="muted small">Answered</div>
+    </div>
+    <div class="card" style="flex:1;text-align:center;padding:.875rem">
+      <div class="stat-val" id="h-total" style="font-family:var(--font-head);font-size:28px">0</div>
+      <div class="muted small">Players</div>
+    </div>
+    <div class="card" style="flex:1;text-align:center;padding:.875rem">
+      <div class="stat-val" id="h-pct" style="font-family:var(--font-head);font-size:28px">0%</div>
+      <div class="muted small">Response</div>
+    </div>
+    <button class="btn btn-primary" id="h-next-btn" onclick="goNext()" style="display:none;flex:2">Next →</button>
+  </div>
+</div>
+
+<!-- ================================================================
+     PLAYER QUESTION VIEW
+================================================================ -->
+<div id="s-player-q" class="screen">
+  <div class="nav z2">
+    <div class="logo-mark"><div class="logo-z">Z</div><div class="logo-txt">APP</div></div>
+    <div class="chip chip-accent" id="p-score-chip">0 pts</div>
+  </div>
+
+  <div style="flex:1;display:flex;flex-direction:column;max-width:600px;margin:0 auto;width:100%;position:relative;z-index:2">
+    <div class="flex gap-1 items-center mb-1">
+      <div style="flex:1">
+        <div class="muted small mb-2" id="p-prog-lbl" style="text-transform:uppercase;letter-spacing:0.08em;font-weight:700"></div>
+        <h2 id="p-q-text" style="font-family:var(--font-head);font-size:clamp(18px,3.5vw,30px);letter-spacing:0.02em;line-height:1.2"></h2>
+      </div>
+      <div class="timer-wrap" id="p-timer-wrap">
+        <svg viewBox="0 0 82 82"><circle class="timer-track" cx="41" cy="41" r="35"/><circle class="timer-fill" id="p-timer-c" cx="41" cy="41" r="35" stroke="var(--accent)"/></svg>
+        <div class="timer-val" id="p-timer-n">—</div>
+      </div>
+    </div>
+    <div id="p-opts-wrap"></div>
+    <div id="p-feedback" style="display:none"></div>
+  </div>
+</div>
+
+<!-- ================================================================
+     PLAYER WAIT
+================================================================ -->
+<div id="s-wait" class="screen">
+  <div class="orb" style="width:400px;height:400px;background:var(--accent);top:50%;left:50%;transform:translate(-50%,-50%);--t:8s"></div>
+  <div class="z2 text-center">
+    <div class="logo-mark" style="justify-content:center;margin-bottom:2rem">
+      <div class="logo-z">Z</div><div class="logo-txt">APP</div>
+    </div>
+    <div class="wait-spinner"></div>
+    <h2 id="pw-msg" style="font-family:var(--font-head);font-size:28px;letter-spacing:0.04em;margin-bottom:.5rem">WAITING FOR HOST</h2>
+    <div class="muted small" id="pw-sub">The quiz will begin shortly</div>
+    <div class="mt-1"><span class="chip chip-accent" id="pw-score">0 pts</span></div>
+  </div>
+</div>
+
+<!-- ================================================================
+     LEADERBOARD
+================================================================ -->
+<div id="s-lb" class="screen">
+  <div class="orb" style="width:300px;height:300px;background:var(--yellow);top:0;right:0;--t:9s;--dx:-20px;--dy:20px"></div>
+  <div class="nav z2">
+    <div class="logo-mark"><div class="logo-z">Z</div><div class="logo-txt">APP</div></div>
+    <div class="chip" id="lb-chip" style="background:rgba(248,212,94,0.12);color:var(--yellow);border-color:rgba(248,212,94,0.3)">LEADERBOARD</div>
+  </div>
+  <h2 id="lb-heading" class="z2 reveal-up" style="font-family:var(--font-head);font-size:clamp(28px,5vw,48px);letter-spacing:0.04em;margin-bottom:1.25rem"><span></span></h2>
+  <div id="lb-list" class="scroll z2 mb-1"></div>
+  <div id="lb-actions" class="z2" style="margin-top:auto"></div>
+</div>
+
+<!-- ================================================================
+     ANALYTICS
+================================================================ -->
+<div id="s-analytics" class="screen">
+  <div class="orb" style="width:350px;height:350px;background:var(--blue);bottom:-80px;left:-80px;--t:11s;--dx:30px;--dy:-20px"></div>
+  <div class="nav z2">
+    <div class="logo-mark"><div class="logo-z">Z</div><div class="logo-txt">APP</div></div>
+    <div class="chip chip-accent">ANALYTICS</div>
+  </div>
+  <h2 id="an-title" class="z2 reveal-up" style="font-family:var(--font-head);font-size:clamp(22px,4vw,38px);letter-spacing:0.04em;margin-bottom:.5rem"><span></span></h2>
+  <div class="muted small mb-1 z2" id="an-sub"></div>
+  <div class="stat-grid z2" id="an-stats"></div>
+  <div class="divider z2"></div>
+  <h3 class="z2 mb-1" style="font-family:var(--font-head);font-size:20px;letter-spacing:0.05em">QUESTION BREAKDOWN</h3>
+  <div id="an-rows" class="scroll z2 mb-1"></div>
+  <div class="z2" style="margin-top:auto">
+    <button class="btn btn-primary btn-lg btn-full" onclick="navigate('s-land');resetAll()">Host Another Quiz →</button>
+  </div>
+</div>
+
+<!-- ================================================================
+     JAVASCRIPT
+================================================================ -->
+<script>
+// ── CURSOR ────────────────────────────────────────────────────────
+const cur = document.getElementById('cursor');
+const ring = document.getElementById('cursor-ring');
+let mx = 0, my = 0;
+document.addEventListener('mousemove', e => {
+  mx = e.clientX; my = e.clientY;
+  cur.style.left = mx + 'px'; cur.style.top = my + 'px';
+  ring.style.left = mx + 'px'; ring.style.top = my + 'px';
+});
+// option hover radial spotlight
+document.addEventListener('mousemove', e => {
+  const el = e.target.closest('.opt');
+  if (el) {
+    const r = el.getBoundingClientRect();
+    el.style.setProperty('--mx', ((e.clientX-r.left)/r.width*100)+'%');
+    el.style.setProperty('--my', ((e.clientY-r.top)/r.height*100)+'%');
+  }
+});
+
+// ── TILT CARD ─────────────────────────────────────────────────────
+document.addEventListener('mousemove', e => {
+  document.querySelectorAll('.tilt-card').forEach(card => {
+    const r = card.getBoundingClientRect();
+    const cx = r.left + r.width/2, cy = r.top + r.height/2;
+    const dx = (e.clientX - cx) / r.width * 12;
+    const dy = (e.clientY - cy) / r.height * -12;
+    card.style.transform = `perspective(600px) rotateY(${dx}deg) rotateX(${dy}deg)`;
+  });
+});
+
+// ── STATE ─────────────────────────────────────────────────────────
+const SK = 'zapp2_v3';
+let G = {
+  quiz:{title:'',questions:[],defaultTime:20,defaultPoints:1000,speedBonus:true},
+  gameCode:'',players:{},currentQ:0,phase:'idle',
+  answeredThisRound:{},questionStartTime:0,qStats:[],
+  hostMode:true,playerId:'',playerName:'',playerScore:0,
+  playerAnswered:false,timerInterval:null,timeLeft:0,pollInterval:null,
+};
+let qs = [], editIdx = null;
+
+const save = () => {
+  try { localStorage.setItem(SK, JSON.stringify({
+    gameCode:G.gameCode,quiz:G.quiz,players:G.players,
+    currentQ:G.currentQ,phase:G.phase,
+    answeredThisRound:G.answeredThisRound,questionStartTime:G.questionStartTime,
+    qStats:G.qStats,
+  })); } catch(e){}
+};
+const load = () => { try{ return JSON.parse(localStorage.getItem(SK)||'{}') }catch(e){return{}} };
+const $  = id => document.getElementById(id);
+const rnd = (n,d=0) => d===0?Math.round(n):parseFloat(n.toFixed(d));
+
+// ── SCREEN NAVIGATION (wipe transition) ───────────────────────────
+function navigate(to) {
+  const wipe = $('wipe');
+  const from = document.querySelector('.screen.active');
+
+  wipe.className = 'enter';
+  wipe.style.background = ['var(--accent)','var(--accent2)','var(--green)','var(--yellow)'][Math.floor(Math.random()*4)];
+
+  setTimeout(() => {
+    if (from) { from.classList.remove('active'); from.classList.add('exit-up'); setTimeout(()=>from.classList.remove('exit-up'),400); }
+    const target = $(to);
+    target.classList.add('active');
+    // re-trigger stagger animations
+    target.querySelectorAll('.stagger > *, .reveal-up span, .clip-reveal').forEach(el => {
+      el.style.animation='none'; el.offsetHeight; el.style.animation='';
+    });
+    wipe.className = 'exit';
+  }, 300);
+}
+
+// ── TAB ───────────────────────────────────────────────────────────
+function setTab(t) {
+  document.querySelectorAll('.tab-btn').forEach((b,i)=>b.classList.toggle('active',(i===0&&t==='host')||(i===1&&t==='join')));
+  $('tab-host').style.display = t==='host'?'':'none';
+  const jt = $('tab-join');
+  jt.style.display = t==='join'?'':'none';
+  if(t==='join') { jt.style.opacity=0; jt.style.animation='staggerIn 0.4s ease forwards'; }
+}
+
+// ── QUIZ BUILDER ─────────────────────────────────────────────────
+function renderQL() {
+  const list = $('q-list');
+  $('q-count-chip').textContent = qs.length;
+  if (!qs.length) {
+    list.innerHTML = '<div class="muted small" style="padding:.75rem 0">No questions yet — add one below.</div>'; return;
+  }
+  const typeLabel = {mcq:'MCQ',tf:'TRUE/FALSE',poll:'POLL'};
+  const typeChip  = {mcq:'chip-accent',tf:'chip-green',poll:'chip-red'};
+  list.innerHTML = qs.map((q,i) => `
+    <div class="q-card tilt-card">
+      <div class="q-num">Q${i+1}</div>
+      <div class="q-text">${esc(q.text)}</div>
+      <div class="q-meta">
+        <span class="chip ${typeChip[q.type]}" style="font-size:11px">${typeLabel[q.type]}</span>
+        <span class="chip chip-accent" style="font-size:11px">${q.time}s</span>
+        ${q.type!=='poll'?`<span class="chip chip-green" style="font-size:11px">${q.points} pts</span>`:''}
+      </div>
+      <div class="flex gap-2 mt-2">
+        <button class="btn btn-ghost btn-sm" onclick="editQ(${i})">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="delQ(${i})">Delete</button>
+      </div>
+    </div>`).join('');
+}
+
+function showForm(idx) {
+  editIdx = idx!==undefined ? idx : null;
+  $('q-form-title').textContent = editIdx!==null ? 'EDIT QUESTION' : 'ADD QUESTION';
+  if (editIdx!==null) {
+    const q=qs[editIdx];
+    $('q-type').value=q.type; $('q-text').value=q.text; $('q-timer').value=q.time;
+    if(q.type==='mcq'){$('qa').value=q.opts[0];$('qb').value=q.opts[1];$('qc').value=q.opts[2];$('qd').value=q.opts[3];$('q-correct').value=q.correct}
+    else if(q.type==='tf'){$('q-tf').value=q.correct; $('q-timer-tf').value=q.time}
+    else{$('pqa').value=q.opts[0]||'';$('pqb').value=q.opts[1]||'';$('pqc').value=q.opts[2]||'';$('pqd').value=q.opts[3]||''}
+  } else {
+    $('q-type').value='mcq'; $('q-text').value='';
+    ['qa','qb','qc','qd','pqa','pqb','pqc','pqd'].forEach(id=>$(id)&&($(id).value=''));
+    $('q-correct').value=0; $('q-timer').value=20;
+  }
+  updateQType();
+  $('q-form').classList.add('show');
+  $('q-form').scrollIntoView({behavior:'smooth'});
+}
+function hideForm() { $('q-form').classList.remove('show'); }
+function editQ(i) { showForm(i); }
+function delQ(i) { qs.splice(i,1); renderQL(); }
+function updateQType() {
+  const t=$('q-type').value;
+  $('mcq-section').style.display=t==='mcq'?'':'none';
+  $('tf-section').style.display=t==='tf'?'':'none';
+  $('poll-section').style.display=t==='poll'?'':'none';
+}
+function saveQ() {
+  const type=$('q-type').value, text=$('q-text').value.trim();
+  if(!text){alert('Enter question text');return}
+  const pts=parseInt($('c-pts').value)||1000;
+  let q={type,text,points:pts};
+  if(type==='mcq'){
+    const opts=[$('qa').value.trim(),$('qb').value.trim(),$('qc').value.trim(),$('qd').value.trim()];
+    if(opts.some(o=>!o)){alert('Fill all 4 options');return}
+    q.opts=opts;q.correct=parseInt($('q-correct').value);q.time=parseInt($('q-timer').value)||20;
+  }else if(type==='tf'){
+    q.opts=['True','False'];q.correct=parseInt($('q-tf').value);q.time=parseInt($('q-timer-tf').value)||15;
+  }else{
+    const opts=[$('pqa').value.trim(),$('pqb').value.trim(),$('pqc').value.trim(),$('pqd').value.trim()].filter(Boolean);
+    if(opts.length<2){alert('Enter at least 2 options');return}
+    q.opts=opts;q.correct=-1;q.time=parseInt($('q-timer').value)||20;
+  }
+  if(editIdx!==null)qs[editIdx]=q; else qs.push(q);
+  hideForm(); renderQL();
+}
+function loadSample() {
+  $('c-title').value='General Knowledge Showdown';
+  qs=[
+    {type:'mcq',text:'What is the capital of Japan?',opts:['Beijing','Seoul','Tokyo','Bangkok'],correct:2,time:20,points:1000},
+    {type:'tf',text:'The Great Wall of China is visible from space with the naked eye.',opts:['True','False'],correct:1,time:15,points:1000},
+    {type:'mcq',text:'Which element has the atomic number 79?',opts:['Silver','Gold','Platinum','Copper'],correct:1,time:25,points:1000},
+    {type:'poll',text:'Which is your favourite season?',opts:['Spring','Summer','Autumn','Winter'],correct:-1,time:20,points:0},
+    {type:'mcq',text:'How many bones are in the adult human body?',opts:['196','206','216','226'],correct:1,time:20,points:1000},
+    {type:'tf',text:'A group of flamingos is called a "flamboyance".',opts:['True','False'],correct:0,time:15,points:1000},
+  ];
+  renderQL();
+}
+
+// ── LAUNCH ────────────────────────────────────────────────────────
+function launchLobby() {
+  const title=$('c-title').value.trim()||'Untitled Quiz';
+  if(!qs.length){alert('Add at least one question!');return}
+  G.quiz={title,questions:[...qs],defaultTime:parseInt($('c-time').value)||20,defaultPoints:parseInt($('c-pts').value)||1000,speedBonus:$('c-speed').value==='1'};
+  G.gameCode=Math.floor(100000+Math.random()*900000).toString();
+  G.players={};G.currentQ=0;G.phase='lobby';G.qStats=[];G.answeredThisRound={};G.hostMode=true;
+  save();
+  $('disp-code').textContent=G.gameCode;
+  $('lobby-sub').textContent=`${title} · ${qs.length} question${qs.length!==1?'s':''}`;
+  renderLobbyPlayers();
+  navigate('s-lobby');
+  startPoll();
+}
+
+// ── POLLING ───────────────────────────────────────────────────────
+function startPoll() {
+  clearInterval(G.pollInterval);
+  G.pollInterval = setInterval(() => {
+    const s=load(); if(!s.gameCode)return;
+    if(G.hostMode){
+      G.players=s.players||{};
+      renderLobbyPlayers();
+      if(s.phase==='question'||s.phase==='reveal'){
+        G.answeredThisRound=s.answeredThisRound||{};
+        updateBars(G.answeredThisRound);
+        const total=Object.keys(G.players).length||1;
+        const answered=Object.keys(G.answeredThisRound).length;
+        $('h-answered').textContent=answered;
+        $('h-pct').textContent=rnd(answered/total*100)+'%';
+      }
+    }
+  },400);
+}
+
+function startPlayerPoll() {
+  clearInterval(G.pollInterval);
+  let lastQ=-1;
+  G.pollInterval=setInterval(()=>{
+    const s=load(); if(!s.gameCode)return;
+    const phase=s.phase;
+    if(phase==='lobby')return;
+    else if(phase==='question'&&s.currentQ!==lastQ){
+      lastQ=s.currentQ; G.playerAnswered=false;
+      G.quiz=s.quiz; G.currentQ=s.currentQ;
+      showPlayerQ(s);
+    }else if(phase==='reveal'&&!G.playerAnswered){
+      handleTimeout(load());
+    }else if(phase==='leaderboard'||phase==='final'){
+      showLB(s,phase==='final');
+    }
+  },500);
+}
+
+// ── LOBBY ─────────────────────────────────────────────────────────
+function renderLobbyPlayers() {
+  const grid=$('lobby-players');
+  const count=Object.keys(G.players).length;
+  $('lobby-count').textContent=count;
+  grid.innerHTML=Object.values(G.players).map(p=>`
+    <div class="player-bubble"><div class="p-dot"></div>${p.name}</div>`).join('');
+}
+
+// ── START GAME ────────────────────────────────────────────────────
+function startGame() {
+  if(!Object.keys(G.players).length){
+    G.players['demo_'+Date.now()]={name:'Demo Player',score:0,answers:[]};
+  }
+  G.currentQ=0; G.phase='question'; G.qStats=[];
+  showHostQ();
+}
+
+// ── HOST QUESTION ─────────────────────────────────────────────────
+function showHostQ() {
+  const q=G.quiz.questions[G.currentQ];
+  clearInterval(G.timerInterval);
+  G.answeredThisRound={}; G.questionStartTime=Date.now();
+  G.phase='question'; save();
+
+  $('h-prog-lbl').textContent=`Q${G.currentQ+1} / ${G.quiz.questions.length}`;
+  $('h-prog-fill').style.width=(G.currentQ/G.quiz.questions.length*100)+'%';
+  $('h-q-text').textContent=q.text;
+  $('h-q-num-bg').textContent=G.currentQ+1;
+  $('h-next-btn').style.display='none';
+  $('h-answered').textContent=0; $('h-pct').textContent='0%';
+  $('h-total').textContent=Object.keys(G.players).length;
+
+  const typeLabels={mcq:'MULTIPLE CHOICE',tf:'TRUE / FALSE',poll:'POLL'};
+  $('h-type-badge').textContent=typeLabels[q.type]||q.type;
+
+  const colors=['opt-A','opt-B','opt-C','opt-D'];
+  if(q.type==='tf'){
+    $('h-opts-display').innerHTML=`<div class="tf-grid">${['True','False'].map((o,i)=>`
+      <div class="tf-opt ${i===0?'tf-true':'tf-false'}" style="pointer-events:none">${o}</div>`).join('')}</div>`;
+  }else{
+    $('h-opts-display').innerHTML=`<div class="opt-grid">${q.opts.map((o,i)=>`
+      <div class="opt ${colors[i]}" style="pointer-events:none">
+        <span class="opt-letter">${['A','B','C','D'][i]}</span>
+        <span class="opt-text">${esc(o)}</span>
+      </div>`).join('')}</div>`;
+  }
+
+  const barColors=['var(--accent)','var(--accent2)','var(--green)','var(--yellow)'];
+  $('h-bars').innerHTML=q.opts.map((o,i)=>`
+    <div class="ans-bar-row">
+      <div class="ans-bar-fill" id="abar-${i}" style="background:${barColors[i]};width:0%"></div>
+      <span class="ans-letter-badge" style="color:${barColors[i]}">${['A','B','C','D'][i]}</span>
+      <span class="ans-bar-text">${esc(o)}</span>
+      <span class="ans-bar-count" id="acnt-${i}">0</span>
+    </div>`).join('');
+
+  navigate('s-host-q');
+  startTimer(q.time,'h-timer-c','h-timer-n','h-timer-wrap',()=>hostReveal());
+  startPoll();
+}
+
+function updateBars(answered) {
+  const q=G.quiz.questions[G.currentQ]; if(!q)return;
+  const counts=new Array(q.opts.length).fill(0);
+  Object.values(answered).forEach(a=>{if(a>=0&&a<q.opts.length)counts[a]++});
+  const total=counts.reduce((a,b)=>a+b,0)||1;
+  counts.forEach((c,i)=>{
+    const b=$('abar-'+i),ct=$('acnt-'+i);
+    if(b)b.style.width=rnd(c/total*100)+'%';
+    if(ct)ct.textContent=c;
+  });
+  $('h-answered').textContent=Object.keys(answered).length;
+}
+
+function hostReveal() {
+  clearInterval(G.timerInterval); G.phase='reveal';
+  const q=G.quiz.questions[G.currentQ];
+  const s=load(); G.answeredThisRound=s.answeredThisRound||G.answeredThisRound;
+  updateBars(G.answeredThisRound);
+  if(q.type!=='poll'){
+    document.querySelectorAll('#h-opts-display .opt, #h-opts-display .tf-opt').forEach((el,i)=>{
+      if(i===q.correct)el.classList.add('correct'); else el.classList.add('dimmed');
+    });
+  }
+  const total=Object.keys(G.players).length;
+  const answered=Object.keys(G.answeredThisRound).length;
+  const counts=new Array(q.opts.length).fill(0);
+  let correctCount=0;
+  const ps=s.players||G.players;
+  Object.values(ps).forEach(p=>{
+    if(p.answers&&p.answers[G.currentQ]){
+      const a=p.answers[G.currentQ];
+      if(a.ans>=0)counts[a.ans]++;
+      if(a.correct)correctCount++;
+    }
+  });
+  G.qStats.push({totalPlayers:total,answeredCount:answered,correctCount,optionCounts:counts,q});
+  G.players=ps; $('h-next-btn').style.display=''; save();
+}
+
+function goNext() {
+  if(G.currentQ<G.quiz.questions.length-1) showLB(null,false);
+  else showLB(null,true);
+}
+
+// ── LEADERBOARD ───────────────────────────────────────────────────
+function showLB(session,isFinal) {
+  const s=session||load(); G.players=s.players||G.players;
+  const sorted=Object.entries(G.players).map(([id,p])=>({...p,id})).sort((a,b)=>b.score-a.score);
+  const medals=['🥇','🥈','🥉']; const rankCls=['gold','silver','bronze'];
+
+  const heading=$('lb-heading').querySelector('span');
+  heading.textContent=isFinal?'FINAL STANDINGS':'AFTER Q'+(G.currentQ+1);
+
+  $('lb-list').innerHTML=sorted.map((p,i)=>`
+    <div class="lb-row ${p.id===G.playerId?'me':''} lb-row-enter" style="animation-delay:${i*0.06}s">
+      <div class="lb-rank ${rankCls[i]||''}">${medals[i]||i+1}</div>
+      <div class="lb-name">${esc(p.name)}${p.id===G.playerId?' <span class="chip chip-red" style="font-size:11px">You</span>':''}</div>
+      <div class="lb-score">${p.score.toLocaleString()}</div>
+    </div>`).join('');
+
+  G.phase=isFinal?'final':'leaderboard'; save();
+  $('lb-actions').innerHTML=isFinal
+    ?(G.hostMode
+      ?`<button class="btn btn-primary btn-lg btn-full" onclick="showAnalytics()">View Analytics →</button>`
+      :`<div class="card text-center"><div class="muted small">Your final rank</div><div style="font-family:var(--font-head);font-size:44px;color:var(--accent)">#${sorted.findIndex(p=>p.id===G.playerId)+1}</div></div>`)
+    :(G.hostMode
+      ?`<button class="btn btn-primary btn-lg btn-full" onclick="nextQ()">Next Question →</button>`
+      :`<div class="card text-center"><div class="muted small">Your rank</div><div style="font-family:var(--font-head);font-size:36px;color:var(--accent)">#${sorted.findIndex(p=>p.id===G.playerId)+1}</div><div class="muted small mt-2">Waiting for next question…</div></div>`);
+
+  if(isFinal && G.hostMode) spawnConfetti();
+  navigate('s-lb');
+}
+
+function nextQ() { G.currentQ++; showHostQ(); }
+
+// ── ANALYTICS ─────────────────────────────────────────────────────
+function showAnalytics() {
+  const playerArr=Object.values(G.players);
+  const total=playerArr.length;
+  const avgScore=total?rnd(playerArr.reduce((a,b)=>a+b.score,0)/total):0;
+  const topScore=playerArr.length?Math.max(...playerArr.map(p=>p.score)):0;
+
+  $('an-title').querySelector('span').textContent=G.quiz.title.toUpperCase()+' — RESULTS';
+  $('an-sub').textContent=`${total} player${total!==1?'s':''} · ${G.quiz.questions.length} questions`;
+  $('an-stats').innerHTML=`
+    <div class="stat-box tilt-card"><div class="stat-val" style="color:var(--accent)">${total}</div><div class="stat-label">Players</div></div>
+    <div class="stat-box tilt-card"><div class="stat-val" style="color:var(--blue)">${G.quiz.questions.length}</div><div class="stat-label">Questions</div></div>
+    <div class="stat-box tilt-card"><div class="stat-val" style="color:var(--green)">${avgScore.toLocaleString()}</div><div class="stat-label">Avg Score</div></div>
+    <div class="stat-box tilt-card" style="border-color:rgba(248,212,94,0.25)"><div class="stat-val" style="color:var(--yellow)">${topScore.toLocaleString()}</div><div class="stat-label">Top Score</div></div>`;
+
+  $('an-rows').innerHTML=G.qStats.map((st,i)=>{
+    const pct=st.answeredCount?rnd(st.correctCount/st.answeredCount*100):0;
+    const isPoll=st.q.type==='poll';
+    if(isPoll){
+      const t2=st.answeredCount||1;
+      const barColors=['var(--accent)','var(--accent2)','var(--green)','var(--yellow)'];
+      return `<div class="q-stat-row" style="flex-direction:column;align-items:flex-start;gap:6px">
+        <div class="flex items-center justify-between" style="width:100%">
+          <span style="font-size:13px;font-weight:600">Q${i+1}: ${esc(st.q.text.slice(0,50))}${st.q.text.length>50?'…':''}</span>
+          <span class="chip chip-accent" style="font-size:11px">POLL</span>
+        </div>
+        ${st.q.opts.map((o,j)=>{const c=st.optionCounts[j]||0;const p=rnd(c/t2*100);return`
+          <div style="display:flex;align-items:center;gap:8px;width:100%">
+            <span style="font-size:11px;font-weight:700;width:14px;color:${barColors[j]}">${['A','B','C','D'][j]}</span>
+            <div style="flex:1;height:6px;background:var(--border);border-radius:4px;overflow:hidden"><div style="width:${p}%;height:100%;background:${barColors[j]};border-radius:4px;transition:width 1s ease"></div></div>
+            <span class="muted small" style="width:36px;text-align:right">${p}%</span>
+            <span class="small" style="width:80px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(o.slice(0,12))}</span>
+          </div>`}).join('')}
+      </div>`;
+    }
+    const bad=pct<50;
+    return `<div class="q-stat-row">
+      <div class="q-stat-pct" style="color:${bad?'var(--red)':'var(--green)'}">${pct}%</div>
+      <div style="flex:1">
+        <div class="q-stat-txt">${esc(st.q.text.slice(0,52))}${st.q.text.length>52?'…':''}</div>
+        <div class="q-stat-bar mt-2"><div class="q-stat-fill" style="width:${pct}%;background:${bad?'var(--red)':'var(--green)'}"></div></div>
+      </div>
+    </div>`;
+  }).join('');
+  navigate('s-analytics');
+}
+
+function endGame() { clearInterval(G.timerInterval); G.phase='final'; save(); if(G.hostMode)showAnalytics(); }
+
+// ── TIMER ─────────────────────────────────────────────────────────
+function startTimer(duration, circleId, textId, wrapId, onEnd) {
+  G.timeLeft=duration;
+  const total=220, circle=$(circleId), text=$(textId), wrap=$(wrapId);
+  if(text)text.textContent=duration;
+  if(circle){circle.style.strokeDashoffset=0;circle.style.stroke='var(--accent)'}
+  if(wrap)wrap.classList.remove('urgent');
+  clearInterval(G.timerInterval);
+  G.timerInterval=setInterval(()=>{
+    G.timeLeft--;
+    if(text)text.textContent=G.timeLeft;
+    const offset=total-(G.timeLeft/duration)*total;
+    if(circle){
+      circle.style.strokeDashoffset=offset;
+      if(G.timeLeft<=5){circle.style.stroke='var(--red)';if(wrap)wrap.classList.add('urgent')}
+      else if(G.timeLeft<=10)circle.style.stroke='var(--yellow)';
+      else circle.style.stroke='var(--accent)';
+    }
+    if(G.timeLeft<=0){clearInterval(G.timerInterval);onEnd()}
+  },1000);
+}
+
+// ── PLAYER JOIN ───────────────────────────────────────────────────
+function joinGame() {
+  const code=$('join-code').value.trim();
+  const name=$('join-name').value.trim();
+  if(!code||!name){alert('Enter code and name');return}
+  const s=load();
+  if(!s.gameCode||s.gameCode!==code){alert('Game not found! Check the code and try again.');return}
+  G.hostMode=false; G.playerId='p_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
+  G.playerName=name; G.playerScore=0; G.playerAnswered=false;
+  G.quiz=s.quiz; G.gameCode=code;
+  const players=s.players||{};
+  players[G.playerId]={name,score:0,answers:[]};
+  try{localStorage.setItem(SK,JSON.stringify({...s,players}))}catch(e){}
+  $('pw-msg').textContent="YOU'RE IN! 🎉";
+  $('pw-sub').textContent='Waiting for the host to start…';
+  $('pw-score').textContent='0 pts';
+  navigate('s-wait');
+  startPlayerPoll();
+}
+
+// ── PLAYER QUESTION ───────────────────────────────────────────────
+function showPlayerQ(session) {
+  const q=session.quiz.questions[session.currentQ];
+  G.timeLeft=q.time;
+  $('p-prog-lbl').textContent=`Q${session.currentQ+1} / ${session.quiz.questions.length}`;
+  $('p-q-text').textContent=q.text;
+  $('p-score-chip').textContent=(G.playerScore||0).toLocaleString()+' pts';
+  $('p-feedback').style.display='none';
+
+  const colors=['opt-A','opt-B','opt-C','opt-D'];
+  if(q.type==='tf'){
+    $('p-opts-wrap').innerHTML=`<div class="tf-grid">
+      <button class="tf-opt tf-true" onclick="playerAnswer(0,this)">✓ True</button>
+      <button class="tf-opt tf-false" onclick="playerAnswer(1,this)">✗ False</button>
+    </div>`;
+  }else{
+    $('p-opts-wrap').innerHTML=`<div class="opt-grid">${q.opts.map((o,i)=>`
+      <button class="opt ${colors[i]}" onclick="playerAnswer(${i},this)">
+        <span class="opt-letter">${['A','B','C','D'][i]}</span>
+        <span class="opt-text">${esc(o)}</span>
+      </button>`).join('')}</div>`;
+  }
+  navigate('s-player-q');
+  startTimer(q.time,'p-timer-c','p-timer-n','p-timer-wrap',()=>{if(!G.playerAnswered)handleTimeout(load())});
+}
+
+function playerAnswer(idx,el) {
+  if(G.playerAnswered)return;
+  G.playerAnswered=true; clearInterval(G.timerInterval);
+  const q=G.quiz.questions[G.currentQ];
+  const isCorrect=q.type!=='poll'&&idx===q.correct;
+  const points=isCorrect?(G.quiz.speedBonus?Math.max(Math.round(q.points*(G.timeLeft/q.time)),Math.round(q.points*0.2)):q.points):0;
+  G.playerScore=(G.playerScore||0)+points;
+
+  document.querySelectorAll('#p-opts-wrap .opt, #p-opts-wrap .tf-opt').forEach(b=>{b.disabled=true;b.classList.add('dimmed')});
+  el.classList.remove('dimmed'); el.classList.add('selected');
+  if(q.type!=='poll'&&isCorrect)el.classList.add('correct');
+  if(q.type!=='poll'&&!isCorrect)el.classList.add('wrong');
+
+  const s=load(); const players=s.players||{};
+  if(players[G.playerId]){
+    players[G.playerId].score=G.playerScore;
+    const ans=players[G.playerId].answers||[];
+    ans[G.currentQ]={ans:idx,correct:isCorrect,points,time:q.time-G.timeLeft};
+    players[G.playerId].answers=ans;
+  }
+  const atr=s.answeredThisRound||{}; atr[G.playerId]=idx;
+  try{localStorage.setItem(SK,JSON.stringify({...s,players,answeredThisRound:atr}))}catch(e){}
+
+  $('p-score-chip').textContent=G.playerScore.toLocaleString()+' pts';
+
+  let fbClass, icon, head, sub;
+  if(q.type==='poll'){fbClass='poll-fb';icon='🗳️';head='VOTE CAST';sub='No points — this is a poll'}
+  else if(isCorrect){fbClass='correct-fb';icon='✓';head='CORRECT!';sub=`+${points.toLocaleString()} pts${G.quiz.speedBonus?' (speed bonus)':''}`}
+  else{fbClass='wrong-fb';icon='✗';head='WRONG';sub='Better luck next round'}
+
+  $('p-feedback').innerHTML=`<div class="feedback-card ${fbClass}">
+    <span class="feedback-icon">${icon}</span>
+    <div class="feedback-head">${head}</div>
+    <div class="feedback-pts">${sub}</div>
+  </div>`;
+  $('p-feedback').style.display='';
+  if(isCorrect&&q.type!=='poll') spawnConfetti(8);
+}
+
+function handleTimeout(session) {
+  if(G.playerAnswered)return; G.playerAnswered=true; clearInterval(G.timerInterval);
+  document.querySelectorAll('#p-opts-wrap .opt, #p-opts-wrap .tf-opt').forEach(b=>{b.disabled=true;b.classList.add('dimmed')});
+  const s=load(); const players=s.players||{};
+  if(players[G.playerId]){
+    const ans=players[G.playerId].answers||[];
+    ans[G.currentQ]={ans:-1,correct:false,points:0,time:999};
+    players[G.playerId].answers=ans;
+  }
+  try{localStorage.setItem(SK,JSON.stringify({...s,players}))}catch(e){}
+  $('p-feedback').innerHTML=`<div class="feedback-card timeout-fb">
+    <span class="feedback-icon">⏰</span>
+    <div class="feedback-head">TIME'S UP</div>
+    <div class="feedback-pts">+0 pts</div>
+  </div>`;
+  $('p-feedback').style.display='';
+}
+
+// ── CONFETTI ──────────────────────────────────────────────────────
+function spawnConfetti(n=40) {
+  const colors=['var(--accent)','var(--accent2)','var(--green)','var(--yellow)','var(--blue)','var(--red)'];
+  for(let i=0;i<n;i++){
+    const el=document.createElement('div');
+    el.className='confetti-piece';
+    el.style.cssText=`left:${Math.random()*100}vw;top:${Math.random()*40}vh;background:${colors[i%colors.length]};animation-delay:${Math.random()*0.5}s;animation-duration:${0.8+Math.random()*0.8}s;transform:rotate(${Math.random()*360}deg);border-radius:${Math.random()>0.5?'50%':'2px'}`;
+    document.body.appendChild(el);
+    el.addEventListener('animationend',()=>el.remove());
+  }
+}
+
+// ── RESET ─────────────────────────────────────────────────────────
+function resetAll() {
+  clearInterval(G.timerInterval); clearInterval(G.pollInterval);
+  qs=[]; editIdx=null;
+  G={quiz:{title:'',questions:[],defaultTime:20,defaultPoints:1000,speedBonus:true},gameCode:'',players:{},currentQ:0,phase:'idle',answeredThisRound:{},questionStartTime:0,qStats:[],hostMode:true,playerId:'',playerName:'',playerScore:0,playerAnswered:false,timerInterval:null,timeLeft:0,pollInterval:null};
+  try{localStorage.removeItem(SK)}catch(e){}
+  renderQL();
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────
+const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+// ── INIT ──────────────────────────────────────────────────────────
+renderQL();
+
+// Animate landing stagger items that need explicit trigger
+document.querySelectorAll('#s-land .stagger').forEach((el,i)=>{
+  el.style.animation=`staggerIn 0.6s cubic-bezier(0.34,1.26,0.64,1) ${0.4+i*0.1}s forwards`;
+});
+</script>
+
+
+<!-- ================================================================
+     AI ASSISTANT SCREEN
+================================================================ -->
+<div id="s-ai" class="screen">
+  <!-- ── Chat Panel ── -->
+  <div class="ai-chat-panel">
+    <!-- ORB HEADER -->
+    <div class="ai-chat-header">
+      <div class="ai-avatar" id="ai-orb">
+        <div class="ai-orb-core"></div>
+        <div class="ai-orb-inner" id="ai-orb-inner">✦</div>
+        <div class="ai-orb-ring"></div>
+      </div>
+      <div style="flex:1;min-width:0">
+        <div class="ai-name"><span>ZAPP</span> AI</div>
+        <div class="ai-status" id="ai-status-text">
+          <div class="ai-status-dot"></div>
+          <span id="ai-status-label">Online · Ready</span>
+        </div>
+        <!-- waveform shown while generating -->
+        <div class="ai-waveform" id="ai-waveform">
+          <div class="wave-bar"></div><div class="wave-bar"></div>
+          <div class="wave-bar"></div><div class="wave-bar"></div>
+          <div class="wave-bar"></div><div class="wave-bar"></div>
+          <div class="wave-bar"></div>
+        </div>
+      </div>
+      <button class="btn btn-ghost btn-sm" style="border-radius:100px;flex-shrink:0" onclick="navigate('s-land')">✕</button>
+    </div>
+
+    <!-- messages -->
+    <div class="ai-messages" id="ai-messages"></div>
+
+    <!-- suggested prompts grid (hidden after first message) -->
+    <div class="ai-suggestions" id="ai-suggestions">
+      <button class="ai-sug-card" onclick="aiQuickPrompt('🌍 World Geography')">
+        <span class="sug-emoji">🌍</span>
+        <span class="sug-title">World Geography</span>
+        <span class="sug-sub">Capitals, flags, continents</span>
+      </button>
+      <button class="ai-sug-card" onclick="aiQuickPrompt('⚛️ Physics basics')">
+        <span class="sug-emoji">⚛️</span>
+        <span class="sug-title">Physics</span>
+        <span class="sug-sub">Forces, energy, waves</span>
+      </button>
+      <button class="ai-sug-card" onclick="aiQuickPrompt('🐍 Python programming')">
+        <span class="sug-emoji">🐍</span>
+        <span class="sug-title">Python Coding</span>
+        <span class="sug-sub">Syntax, functions, logic</span>
+      </button>
+      <button class="ai-sug-card" onclick="aiQuickPrompt('🏏 Cricket trivia')">
+        <span class="sug-emoji">🏏</span>
+        <span class="sug-title">Cricket</span>
+        <span class="sug-sub">Records, players, rules</span>
+      </button>
+      <button class="ai-sug-card" onclick="aiQuickPrompt('🧬 Human biology')">
+        <span class="sug-emoji">🧬</span>
+        <span class="sug-title">Human Biology</span>
+        <span class="sug-sub">Anatomy, cells, systems</span>
+      </button>
+      <button class="ai-sug-card" onclick="aiQuickPrompt('🎬 Bollywood movies')">
+        <span class="sug-emoji">🎬</span>
+        <span class="sug-title">Bollywood</span>
+        <span class="sug-sub">Films, actors, songs</span>
+      </button>
+    </div>
+
+    <!-- gen progress bar -->
+    <div class="gen-progress" id="gen-progress"><div class="gen-progress-bar" id="gen-bar"></div></div>
+
+    <!-- input -->
+    <div class="ai-input-row">
+      <div class="ai-input-wrap">
+        <textarea class="ai-textarea" id="ai-input" rows="1"
+          placeholder="Ask me anything… e.g. 'Make a quiz about the Solar System'"
+          onkeydown="aiInputKey(event)" oninput="aiInputResize(this)"></textarea>
+        <button class="ai-send-btn" id="ai-send-btn" onclick="aiSend()">➤</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Slides Panel ── -->
+  <div class="ai-slides-panel">
+    <div class="ai-slides-toolbar">
+      <div style="font-family:var(--font-head);font-size:18px;letter-spacing:0.05em;background:linear-gradient(90deg,var(--text),var(--muted));-webkit-background-clip:text;-webkit-text-fill-color:transparent">GENERATED SLIDES</div>
+      <span class="slides-count-chip" id="ai-slide-count">0 slides</span>
+      <button class="back-create-btn" id="ai-use-btn" onclick="aiUseQuiz()" style="display:none">
+        ⚡ Use This Quiz
+      </button>
+      <button class="btn btn-ghost btn-sm" onclick="navigate('s-land')" style="margin-left:8px;border-radius:100px">← Home</button>
+    </div>
+    <div class="ai-slides-scroll" id="ai-slides-list">
+      <div class="slides-empty" id="ai-slides-empty">
+        <div class="slides-empty-orb">
+          <div class="empty-symbol">✦</div>
+        </div>
+        <div class="slides-empty-title">ASK ZAPP AI</div>
+        <div class="slides-empty-sub">Tell me a topic and I'll instantly build you a full, editable, ready-to-launch quiz.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── FLOATING AI BUTTON (visible on all other screens) ── -->
+<button class="ai-float-btn" id="ai-fab" onclick="navigate('s-ai')" title="ZAPP AI">
+  <div class="fab-icon">✦</div>
+  <div class="ai-float-tooltip">Generate with AI</div>
+</button>
+
+<!-- ================================================================
+     LOGIN
+================================================================ -->
+<div id="s-login" class="screen active">
+  <div class="orb" style="width:400px;height:400px;background:var(--accent);top:-120px;right:-80px;--t:10s;--dx:-30px;--dy:40px"></div>
+  <div class="orb" style="width:280px;height:280px;background:var(--accent2);bottom:-60px;left:-60px;--t:12s;--d:1s;--dx:30px;--dy:-30px"></div>
+  <div class="auth-box">
+    <div class="flex items-center justify-between mb-1" style="margin-bottom:1.5rem">
+      <div class="logo-mark"><div class="logo-z">Z</div><div class="logo-txt">APP</div></div>
+      <button class="btn btn-ghost btn-sm" onclick="navigate('s-land')">← Back</button>
+    </div>
+    <div class="auth-title">WELCOME BACK</div>
+    <div class="auth-sub">Sign in to access your quizzes and history</div>
+    <div class="auth-msg" id="login-msg"></div>
+    <div class="auth-form">
+      <div class="input-group">
+        <span class="input-icon">✉</span>
+        <input id="li-email" type="email" placeholder="Email address" autocomplete="email">
+        <div class="input-focus-line"></div>
+      </div>
+      <div class="input-group">
+        <span class="input-icon">🔒</span>
+        <input id="li-pass" type="password" placeholder="Password" autocomplete="current-password">
+        <button class="password-toggle" onclick="togglePwd('li-pass',this)" type="button">👁</button>
+        <div class="input-focus-line"></div>
+      </div>
+      <div class="flex justify-between items-center" style="font-size:13px">
+        <label style="display:flex;align-items:center;gap:6px;cursor:none;text-transform:none;letter-spacing:0;font-size:13px;color:var(--text)">
+          <input type="checkbox" id="li-remember" style="width:auto;cursor:none"> Remember me
+        </label>
+        <a class="auth-link" onclick="showForgot()" style="font-size:13px">Forgot password?</a>
+      </div>
+      <button class="btn btn-primary btn-full btn-lg" onclick="doLogin()" style="margin-top:.25rem">Sign In →</button>
+    </div>
+    <div class="auth-divider">or</div>
+    <button class="btn btn-ghost btn-full" onclick="doGuestLogin()" style="border-radius:12px">
+      <span>👤</span> Continue as Guest
+    </button>
+    <div class="auth-footer">
+      Don't have an account? <a class="auth-link" onclick="navigate('s-signup')">Sign up free</a>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================
+     SIGNUP
+================================================================ -->
+<div id="s-signup" class="screen">
+  <div class="orb" style="width:450px;height:450px;background:var(--green);top:-100px;left:-100px;--t:11s;--dx:40px;--dy:40px"></div>
+  <div class="orb" style="width:300px;height:300px;background:var(--accent);bottom:-60px;right:-60px;--t:9s;--d:2s;--dx:-20px;--dy:-30px"></div>
+  <div class="auth-box">
+    <div class="flex items-center justify-between" style="margin-bottom:1.5rem">
+      <div class="logo-mark"><div class="logo-z">Z</div><div class="logo-txt">APP</div></div>
+      <button class="btn btn-ghost btn-sm" onclick="navigate('s-login')">← Login</button>
+    </div>
+    <div class="auth-title">JOIN ZAPP</div>
+    <div class="auth-sub">Create your free account and start hosting quizzes</div>
+    <div class="auth-msg" id="su-msg"></div>
+    <div class="auth-form">
+      <div class="input-group">
+        <span class="input-icon">😀</span>
+        <input id="su-name" type="text" placeholder="Display name" autocomplete="name" oninput="checkName(this)">
+        <div class="input-focus-line"></div>
+      </div>
+      <div class="input-group">
+        <span class="input-icon">✉</span>
+        <input id="su-email" type="email" placeholder="Email address" autocomplete="email" oninput="checkEmail(this)">
+        <div class="input-focus-line"></div>
+      </div>
+      <div>
+        <div class="input-group">
+          <span class="input-icon">🔒</span>
+          <input id="su-pass" type="password" placeholder="Create password" autocomplete="new-password" oninput="checkStrength(this.value)">
+          <button class="password-toggle" onclick="togglePwd('su-pass',this)" type="button">👁</button>
+          <div class="input-focus-line"></div>
+        </div>
+        <div class="strength-bar mt-2" id="strength-bar">
+          <div class="strength-seg" id="ss1"></div>
+          <div class="strength-seg" id="ss2"></div>
+          <div class="strength-seg" id="ss3"></div>
+          <div class="strength-seg" id="ss4"></div>
+        </div>
+        <div class="strength-label muted" id="strength-label"></div>
+      </div>
+      <div class="input-group">
+        <span class="input-icon">🔒</span>
+        <input id="su-pass2" type="password" placeholder="Confirm password" autocomplete="new-password">
+        <div class="input-focus-line"></div>
+      </div>
+      <label style="display:flex;align-items:flex-start;gap:8px;cursor:none;text-transform:none;letter-spacing:0;font-size:13px;color:var(--muted);margin-top:-.25rem">
+        <input type="checkbox" id="su-terms" style="width:auto;cursor:none;margin-top:2px;flex-shrink:0">
+        I agree to the <a class="auth-link" style="font-size:13px">Terms of Service</a> and <a class="auth-link" style="font-size:13px">Privacy Policy</a>
+      </label>
+      <button class="btn btn-success btn-full btn-lg" onclick="doSignup()" style="margin-top:.25rem">Create Account →</button>
+    </div>
+    <div class="auth-footer">
+      Already have an account? <a class="auth-link" onclick="navigate('s-login')">Sign in</a>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================
+     PROFILE / MY QUIZZES
+================================================================ -->
+<div id="s-profile" class="screen">
+  <div class="orb" style="width:400px;height:400px;background:var(--blue);top:-80px;right:-80px;--t:10s;--dx:-20px;--dy:20px"></div>
+  <div class="nav z2">
+    <div class="logo-mark"><div class="logo-z">Z</div><div class="logo-txt">APP</div></div>
+    <button class="btn btn-ghost btn-sm" onclick="navigate('s-land')">← Home</button>
+  </div>
+
+  <!-- Hero -->
+  <div class="profile-hero z2">
+    <div class="profile-avatar-big" id="prof-avatar">?</div>
+    <div>
+      <div style="font-family:var(--font-head);font-size:28px;letter-spacing:0.04em" id="prof-name">User</div>
+      <div class="muted small" id="prof-email">guest</div>
+      <div class="flex gap-2 mt-2" style="flex-wrap:wrap">
+        <span class="chip chip-accent" id="prof-role">Host</span>
+        <span class="chip chip-green" id="prof-member">Member since today</span>
+      </div>
+    </div>
+    <div style="margin-left:auto">
+      <button class="btn btn-ghost btn-sm" onclick="doLogout()">Sign Out</button>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stat-mini-grid z2">
+    <div class="stat-mini tilt-card">
+      <div class="stat-mini-val" id="prof-quizzes-made" style="color:var(--accent)">0</div>
+      <div class="stat-mini-lbl">Quizzes Created</div>
+    </div>
+    <div class="stat-mini tilt-card">
+      <div class="stat-mini-val" id="prof-games-played" style="color:var(--green)">0</div>
+      <div class="stat-mini-lbl">Games Played</div>
+    </div>
+    <div class="stat-mini tilt-card">
+      <div class="stat-mini-val" id="prof-best-score" style="color:var(--yellow)">0</div>
+      <div class="stat-mini-lbl">Best Score</div>
+    </div>
+  </div>
+
+  <div class="divider z2"></div>
+
+  <!-- Saved Quizzes -->
+  <div class="flex items-center justify-between mb-1 z2">
+    <h3 style="font-family:var(--font-head);font-size:20px;letter-spacing:0.05em">MY QUIZZES</h3>
+    <button class="btn btn-primary btn-sm" onclick="navigate('s-create')">+ New Quiz</button>
+  </div>
+  <div id="prof-quiz-list" class="scroll z2 mb-1" style="flex:1"></div>
+
+  <!-- Edit Profile Section -->
+  <div class="card z2 mt-1">
+    <div style="font-family:var(--font-head);font-size:16px;letter-spacing:0.05em;margin-bottom:1rem">EDIT PROFILE</div>
+    <div class="grid2 gap-sm mb-1">
+      <div><label>Display Name</label><input id="edit-name" placeholder="Your name"></div>
+      <div><label>New Password</label><input id="edit-pass" type="password" placeholder="Leave blank to keep"></div>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="saveProfile()">Save Changes</button>
+  </div>
+</div>
+
+<script>
+// ============================================================
+//  AUTH SYSTEM  (localStorage-based, simulates real backend)
+// ============================================================
+const AUTH_KEY = 'zapp_users_v1';
+const SESSION_KEY = 'zapp_session_v1';
+
+// ── helpers ──
+const toast = (msg, type='ok') => {
+  const el = $('toast');
+  el.textContent = '';
+  const icon = type==='ok' ? '✓' : '✗';
+  el.innerHTML = `<span>${icon}</span> ${msg}`;
+  el.className = `toast show t-${type}`;
+  clearTimeout(toast._t);
+  toast._t = setTimeout(()=>el.classList.remove('show'), 3000);
+};
+
+function getUsers() {
+  try { return JSON.parse(localStorage.getItem(AUTH_KEY)||'{}'); } catch(e){ return {}; }
+}
+function saveUsers(u) {
+  try { localStorage.setItem(AUTH_KEY, JSON.stringify(u)); } catch(e){}
+}
+function getSession() {
+  try { return JSON.parse(localStorage.getItem(SESSION_KEY)||'null'); } catch(e){ return null; }
+}
+function setSession(data) {
+  try { localStorage.setItem(SESSION_KEY, JSON.stringify(data)); } catch(e){}
+}
+function clearSession() {
+  try { localStorage.removeItem(SESSION_KEY); } catch(e){}
+}
+
+// ── password strength ──
+function checkStrength(pw) {
+  const segs = ['ss1','ss2','ss3','ss4'];
+  const lbl = $('strength-label');
+  segs.forEach(id => { const el=$(id); el.className='strength-seg'; });
+  let score = 0;
+  if (pw.length >= 6) score++;
+  if (pw.length >= 10) score++;
+  if (/[A-Z]/.test(pw) && /[0-9]/.test(pw)) score++;
+  if (/[^a-zA-Z0-9]/.test(pw)) score++;
+  const labels  = ['','Weak','Fair','Good','Strong'];
+  const classes = ['','weak','fair','good','strong'];
+  for (let i=0;i<score;i++) $(segs[i]).classList.add(classes[score]);
+  lbl.textContent = pw ? labels[score] : '';
+  lbl.style.color = ['','var(--red)','var(--yellow)','var(--accent2)','var(--green)'][score];
+}
+
+// ── field validators ──
+function checkName(el) {
+  el.style.borderColor = el.value.trim().length >= 2 ? 'var(--green)' : 'var(--border)';
+}
+function checkEmail(el) {
+  const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(el.value);
+  el.style.borderColor = valid ? 'var(--green)' : 'var(--border)';
+}
+
+// ── toggle password visibility ──
+function togglePwd(inputId, btn) {
+  const inp = $(inputId);
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+  btn.textContent = inp.type === 'password' ? '👁' : '🙈';
+}
+
+// ── show error in auth box ──
+function showAuthMsg(boxId, msg, type='err') {
+  const el = $(boxId);
+  el.className = 'auth-msg ' + type;
+  el.innerHTML = `<span>${type==='err'?'⚠':'✓'}</span> ${msg}`;
+  if (type==='err') {
+    el.closest('.auth-box').classList.add('shake');
+    setTimeout(()=>el.closest('.auth-box').classList.remove('shake'), 400);
+  }
+}
+function clearAuthMsg(id) { const el=$(id); if(el) el.className='auth-msg'; }
+
+// ── SIGN UP ──
+function doSignup() {
+  clearAuthMsg('su-msg');
+  const name  = $('su-name').value.trim();
+  const email = $('su-email').value.trim().toLowerCase();
+  const pass  = $('su-pass').value;
+  const pass2 = $('su-pass2').value;
+  const terms = $('su-terms').checked;
+
+  if (!name)                          { showAuthMsg('su-msg','Please enter your display name'); return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showAuthMsg('su-msg','Enter a valid email address'); return; }
+  if (pass.length < 6)                { showAuthMsg('su-msg','Password must be at least 6 characters'); return; }
+  if (pass !== pass2)                 { showAuthMsg('su-msg','Passwords do not match'); return; }
+  if (!terms)                         { showAuthMsg('su-msg','Please accept the terms to continue'); return; }
+
+  const users = getUsers();
+  if (users[email])                   { showAuthMsg('su-msg','An account with this email already exists'); return; }
+
+  // create account
+  const uid = 'u_' + Date.now();
+  users[email] = {
+    uid, name, email,
+    passHash: btoa(pass), // simple encoding (not real crypto — for demo)
+    createdAt: Date.now(),
+    quizzesMade: 0,
+    gamesPlayed: 0,
+    bestScore: 0,
+    savedQuizzes: [],
+    history: [],
+  };
+  saveUsers(users);
+  setSession({ uid, email, name, isGuest:false });
+  showAuthMsg('su-msg', 'Account created! Welcome to ZAPP 🎉', 'ok');
+  setTimeout(() => { onLogin(users[email]); navigate('s-land'); }, 800);
+}
+
+// ── LOGIN ──
+function doLogin() {
+  clearAuthMsg('login-msg');
+  const email = $('li-email').value.trim().toLowerCase();
+  const pass  = $('li-pass').value;
+  if (!email || !pass) { showAuthMsg('login-msg','Please fill in all fields'); return; }
+
+  const users = getUsers();
+  const user  = users[email];
+  if (!user || user.passHash !== btoa(pass)) {
+    showAuthMsg('login-msg','Invalid email or password');
+    return;
+  }
+  setSession({ uid:user.uid, email, name:user.name, isGuest:false });
+  if ($('li-remember').checked) {
+    try { localStorage.setItem('zapp_remember', email); } catch(e){}
+  }
+  showAuthMsg('login-msg', `Welcome back, ${user.name}! ✓`, 'ok');
+  setTimeout(() => { onLogin(user); navigate('s-land'); }, 600);
+}
+
+// ── GUEST ──
+function doGuestLogin() {
+  const guestName = 'Guest_' + Math.floor(1000+Math.random()*9000);
+  setSession({ uid:'guest_'+Date.now(), email:'', name:guestName, isGuest:true });
+  const fakeUser = { name:guestName, email:'Guest', createdAt:Date.now(), quizzesMade:0, gamesPlayed:0, bestScore:0, savedQuizzes:[], history:[] };
+  onLogin(fakeUser);
+  navigate('s-land');
+  toast(`Playing as ${guestName}`);
+}
+
+// ── LOGOUT ──
+function doLogout() {
+  clearSession();
+  onLogout();
+  navigate('s-login');
+  toast('Signed out successfully');
+}
+
+// ── POST-LOGIN UI UPDATE ──
+function onLogin(user) {
+  document.body.classList.add('authed');
+  $('global-nav').classList.add('show');
+  const initials = (user.name||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+  $('nav-avatar').textContent = initials;
+  renderLandAuthBar(true, user.name);
+  renderProfile(user);
+  if ($('join-name') && !$('join-name').value) $('join-name').value = user.name;
+}
+function onLogout() {
+  document.body.classList.remove('authed');
+  $('global-nav').classList.remove('show');
+  renderLandAuthBar(false, null);
+}
+
+// ── LANDING AUTH BAR ──
+function renderLandAuthBar(loggedIn, name) {
+  const bar = $('land-auth-bar');
+  if (!bar) return;
+  if (loggedIn) {
+    const initials = (name||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+    bar.innerHTML = `
+      <div class="flex items-center gap-2">
+        <div class="avatar avatar-sm" style="width:32px;height:32px;font-size:12px">${initials}</div>
+        <span class="small bold">${name}</span>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="navigate('s-profile')">My Quizzes</button>`;
+  } else {
+    bar.innerHTML = `
+      <button class="btn btn-ghost btn-sm" onclick="navigate('s-login')">Sign In</button>
+      <button class="btn btn-primary btn-sm" onclick="navigate('s-signup')">Sign Up Free →</button>`;
+  }
+}
+
+// ── FORGOT PASSWORD (simple modal-free flow) ──
+function showForgot() {
+  const email = prompt('Enter your registered email to reset your password:');
+  if (!email) return;
+  const users = getUsers();
+  if (users[email.toLowerCase()]) {
+    toast('Password reset link sent! (Demo: check console)', 'ok');
+    console.log('ZAPP Demo — reset link for:', email, '| temp pass: zapp1234');
+    // In a real app you'd send an email. For demo, just alert the pass.
+    setTimeout(()=>alert(`Demo reset: Your temporary password is "zapp1234". Please change it after logging in.`), 500);
+  } else {
+    toast('No account found with that email', 'err');
+  }
+}
+
+// ── PROFILE RENDER ──
+function renderProfile(user) {
+  if (!user) return;
+  const session = getSession();
+  const users = getUsers();
+  const fresh = session && !session.isGuest ? users[session.email] : null;
+  const u = fresh || user;
+
+  $('prof-avatar').textContent = (u.name||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+  $('prof-name').textContent   = u.name || 'Guest';
+  $('prof-email').textContent  = u.email || 'Guest session';
+  $('prof-quizzes-made').textContent = u.quizzesMade || 0;
+  $('prof-games-played').textContent = u.gamesPlayed || 0;
+  $('prof-best-score').textContent   = (u.bestScore||0).toLocaleString();
+  $('edit-name').value = u.name || '';
+
+  const daysSince = Math.floor((Date.now()-(u.createdAt||Date.now()))/86400000);
+  $('prof-member').textContent = daysSince===0?'Joined today':`Member for ${daysSince} day${daysSince!==1?'s':''}`;
+  $('prof-role').textContent = session?.isGuest ? 'Guest' : 'Host';
+
+  renderSavedQuizzes(u);
+}
+
+function renderSavedQuizzes(u) {
+  const list = $('prof-quiz-list');
+  const saved = u.savedQuizzes || [];
+  if (!saved.length) {
+    list.innerHTML = `<div class="muted small" style="padding:1.5rem 0;text-align:center">
+      <div style="font-size:32px;margin-bottom:8px">📋</div>
+      No quizzes yet — <a class="auth-link" onclick="navigate('s-create')">create your first one!</a>
+    </div>`;
+    return;
+  }
+  list.innerHTML = saved.map((q,i) => `
+    <div class="quiz-history-card">
+      <div class="qh-icon">❓</div>
+      <div class="qh-info">
+        <div class="qh-title">${esc(q.title)}</div>
+        <div class="qh-meta">${q.questions} questions · ${q.date}</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="loadSavedQuiz(${i})">Load</button>
+    </div>`).join('');
+}
+
+function loadSavedQuiz(idx) {
+  const session = getSession();
+  if (!session || session.isGuest) { toast('Sign in to load saved quizzes', 'err'); return; }
+  const users = getUsers();
+  const u = users[session.email];
+  if (!u) return;
+  const saved = u.savedQuizzes[idx];
+  if (!saved) return;
+  qs = JSON.parse(saved.questions_data||'[]');
+  $('c-title').value = saved.title;
+  renderQL();
+  navigate('s-create');
+  toast(`Loaded: ${saved.title}`);
+}
+
+// ── SAVE PROFILE ──
+function saveProfile() {
+  const session = getSession();
+  if (!session || session.isGuest) { toast('Sign in to edit your profile', 'err'); return; }
+  const users = getUsers();
+  const u = users[session.email];
+  if (!u) return;
+  const newName = $('edit-name').value.trim();
+  const newPass = $('edit-pass').value;
+  if (newName) u.name = newName;
+  if (newPass && newPass.length >= 6) u.passHash = btoa(newPass);
+  else if (newPass) { toast('Password must be at least 6 characters', 'err'); return; }
+  saveUsers(users);
+  setSession({...session, name: u.name});
+  $('nav-avatar').textContent = u.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+  renderProfile(u);
+  toast('Profile updated!');
+}
+
+// ── SAVE QUIZ TO PROFILE ──
+function saveQuizToProfile() {
+  const session = getSession();
+  if (!session || session.isGuest) return; // silently skip for guests
+  const users = getUsers();
+  const u = users[session.email];
+  if (!u) return;
+  const title = $('c-title').value.trim() || 'Untitled Quiz';
+  if (!qs.length) return;
+  u.savedQuizzes = u.savedQuizzes || [];
+  // don't duplicate
+  const existing = u.savedQuizzes.findIndex(q=>q.title===title);
+  const entry = { title, questions: qs.length, date: new Date().toLocaleDateString(), questions_data: JSON.stringify(qs) };
+  if (existing>=0) u.savedQuizzes[existing] = entry; else u.savedQuizzes.unshift(entry);
+  u.quizzesMade = u.savedQuizzes.length;
+  saveUsers(users);
+}
+
+// ── PROTECTED ROUTES (cannot access without login) ──
+const PROTECTED_SCREENS = ['s-land','s-create','s-lobby','s-host-q','s-player-q','s-wait','s-lb','s-analytics','s-ai','s-profile'];
+const AUTH_SCREENS = ['s-login','s-signup'];
+
+// ── INIT AUTH ──
+function initAuth() {
+  const session = getSession();
+  if (session) {
+    const users = getUsers();
+    const user = session.isGuest
+      ? { name:session.name, email:'', createdAt:Date.now(), quizzesMade:0, gamesPlayed:0, bestScore:0, savedQuizzes:[], history:[] }
+      : users[session.email];
+    if (user) {
+      onLogin(user);
+      // If currently on an auth screen, send to landing
+      const active = document.querySelector('.screen.active');
+      if (!active || AUTH_SCREENS.includes(active.id)) {
+        _navigateRaw('s-land');
+      }
+      return;
+    }
+  }
+  // Not logged in — force to login screen
+  const active = document.querySelector('.screen.active');
+  if (!active || PROTECTED_SCREENS.includes(active.id)) {
+    _navigateRaw('s-login');
+  }
+  renderLandAuthBar(false, null);
+  try {
+    const rem = localStorage.getItem('zapp_remember');
+    if (rem && $('li-email')) $('li-email').value = rem;
+  } catch(e){}
+}
+
+// raw navigate without auth check (used internally)
+function _navigateRaw(to) {
+  const wipe = $('wipe');
+  const from = document.querySelector('.screen.active');
+  if (from && from.id === to) return;
+  if (wipe) {
+    wipe.className = 'enter';
+    wipe.style.background = ['var(--accent)','var(--accent2)','var(--green)','var(--yellow)'][Math.floor(Math.random()*4)];
+  }
+  setTimeout(() => {
+    if (from) { from.classList.remove('active'); from.classList.add('exit-up'); setTimeout(()=>from.classList.remove('exit-up'),400); }
+    const target = $(to);
+    if (!target) return;
+    target.classList.add('active');
+    target.querySelectorAll('.stagger > *, .reveal-up span, .clip-reveal').forEach(el => {
+      el.style.animation='none'; el.offsetHeight; el.style.animation='';
+    });
+    if (wipe) wipe.className = 'exit';
+  }, wipe ? 300 : 0);
+}
+
+// Patch launchLobby to auto-save quiz
+const _origLaunch = launchLobby;
+window.launchLobby = function() {
+  saveQuizToProfile();
+  _origLaunch();
+};
+
+initAuth();
+
+
+// ============================================================
+//  AI ASSISTANT — ZAPP AI — ENHANCED INTERACTIVE VERSION
+// ============================================================
+
+aiSlides = [];
+aiGenerating = false;
+let aiMsgHistory = []; // full conversation history for multi-turn
+AI_MODEL = 'claude-sonnet-4-20250514';
+
+AI_CONVERSATION = {
+  step: 'idle',   // idle | topic | count | difficulty | generating | done
+  topic: '',
+  count: 8,
+  difficulty: 'medium',
+};
+
+// ── ORB STATE ──
+function setOrbState(state) {
+  const orb = document.getElementById('ai-orb');
+  const label = document.getElementById('ai-status-label');
+  const wave = document.getElementById('ai-waveform');
+  const statusDot = document.querySelector('.ai-status-dot');
+  if (!orb) return;
+  orb.classList.remove('thinking');
+  if (wave) wave.classList.remove('active');
+  if (state === 'thinking') {
+    orb.classList.add('thinking');
+    if (label) label.textContent = 'Thinking…';
+    if (statusDot) statusDot.style.background = 'var(--yellow)';
+  } else if (state === 'generating') {
+    orb.classList.add('thinking');
+    if (wave) wave.classList.add('active');
+    if (label) label.textContent = 'Generating quiz…';
+    if (statusDot) statusDot.style.background = 'var(--accent2)';
+  } else {
+    if (label) label.textContent = 'Online · Ready';
+    if (statusDot) statusDot.style.background = 'var(--green)';
+  }
+}
+
+// ── FAB VISIBILITY (hide on AI screen, show elsewhere) ──
+function updateFAB(screenId) {
+  const fab = document.getElementById('ai-fab');
+  if (!fab) return;
+  fab.style.display = screenId === 's-ai' ? 'none' : 'flex';
+}
+
+// ── INIT ──
+function initAIScreen() {
+  const msgs = document.getElementById('ai-messages');
+  msgs.innerHTML = '';
+  aiSlides = [];
+  aiMsgHistory = [];
+  renderAISlides();
+  AI_CONVERSATION.step = 'idle';
+  AI_CONVERSATION.topic = '';
+  setOrbState('ready');
+
+  // show suggestion grid
+  const sug = document.getElementById('ai-suggestions');
+  if (sug) sug.style.display = 'grid';
+
+  // stream the welcome message
+  const session = getSession();
+  const name = session?.name ? session.name.split(' ')[0] : null;
+  const greeting = name ? `Hey <strong>${name}</strong>! 👋` : `Hey there! 👋`;
+
+  aiStreamMsg(`${greeting} I'm <strong>ZAPP AI</strong> ✦ — your quiz co-pilot.<br><br>
+Give me any <strong>topic</strong> and I'll craft a complete, editable quiz in seconds.
+You can also ask me to <em>adjust difficulty</em>, <em>change question types</em>, or <em>regenerate any slide</em>.`);
+}
+
+// ── STREAM A MESSAGE WORD BY WORD ──
+async function aiStreamMsg(html, chips) {
+  const msgs = document.getElementById('ai-messages');
+  const div = document.createElement('div');
+  div.className = 'msg ai';
+
+  const av = document.createElement('div');
+  av.className = 'msg-avatar';
+  av.textContent = '✦';
+
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble';
+
+  div.appendChild(av);
+  div.appendChild(bubble);
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+
+  // Strip HTML tags for word-by-word, then set final HTML
+  // For streaming effect, just fade in the full HTML after a short delay
+  bubble.style.opacity = '0';
+  bubble.innerHTML = html;
+
+  // Animate in
+  await delay(50);
+  bubble.style.transition = 'opacity 0.4s ease';
+  bubble.style.opacity = '1';
+
+  if (chips && chips.length) {
+    await delay(300);
+    const chipRow = document.createElement('div');
+    chipRow.className = 'quick-chips';
+    chips.forEach((c, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'qchip';
+      btn.innerHTML = c.label || c;
+      btn.style.animationDelay = `${i * 0.07}s`;
+      btn.style.opacity = '0';
+      btn.style.animation = `sugIn 0.4s cubic-bezier(0.34,1.26,0.64,1) ${i*0.07}s forwards`;
+      btn.onclick = () => {
+        document.getElementById('ai-input').value = c.value || c.replace(/^[^\w]+/, '').trim();
+        aiSend();
+      };
+      chipRow.appendChild(btn);
+    });
+    bubble.appendChild(chipRow);
+  }
+
+  msgs.scrollTop = msgs.scrollHeight;
+  return div;
+}
+
+// ── ADD USER MESSAGE ──
+function aiAddUserMsg(text) {
+  const msgs = document.getElementById('ai-messages');
+  const div = document.createElement('div');
+  div.className = 'msg user';
+  const av = document.createElement('div');
+  av.className = 'msg-avatar';
+  const session = getSession();
+  av.textContent = session?.name?.[0]?.toUpperCase() || 'U';
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble';
+  bubble.textContent = text;
+  div.appendChild(bubble);
+  div.appendChild(av);
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+// ── LEGACY addMsg (for compatibility) ──
+function aiAddMsg(role, html, chips) {
+  if (role === 'user') { aiAddUserMsg(html); return; }
+  return aiStreamMsg(html, chips);
+}
+
+// ── TYPING INDICATOR ──
+function aiShowTyping() {
+  const msgs = document.getElementById('ai-messages');
+  const div = document.createElement('div');
+  div.className = 'msg ai'; div.id = 'ai-typing';
+  const av = document.createElement('div'); av.className = 'msg-avatar'; av.textContent = '✦';
+  const bubble = document.createElement('div'); bubble.className = 'msg-bubble';
+  bubble.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
+  div.appendChild(av); div.appendChild(bubble);
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+function aiHideTyping() {
+  const el = document.getElementById('ai-typing');
+  if (el) el.remove();
+}
+
+// ── QUICK PROMPT FROM SUGGESTION CARDS ──
+function aiQuickPrompt(text) {
+  const input = document.getElementById('ai-input');
+  input.value = text;
+  // hide suggestions
+  const sug = document.getElementById('ai-suggestions');
+  if (sug) { sug.style.transition = 'all 0.3s'; sug.style.opacity='0'; sug.style.maxHeight='0'; sug.style.padding='0'; setTimeout(()=>sug.style.display='none', 300); }
+  aiSend();
+}
+
+// ── HANDLE SEND ──
+async function aiSend() {
+  if (aiGenerating) return;
+  const input = document.getElementById('ai-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  aiInputResize(input);
+
+  // hide suggestions on first message
+  const sug = document.getElementById('ai-suggestions');
+  if (sug && sug.style.display !== 'none') {
+    sug.style.transition = 'all 0.3s'; sug.style.opacity='0'; sug.style.maxHeight='0'; sug.style.padding='0';
+    setTimeout(()=>sug.style.display='none', 300);
+  }
+
+  aiAddUserMsg(text);
+  aiMsgHistory.push({ role:'user', content: text });
+
+  const step = AI_CONVERSATION.step;
+
+  if (step === 'idle' || step === 'topic') {
+    AI_CONVERSATION.topic = text;
+    AI_CONVERSATION.step = 'count';
+    setOrbState('thinking');
+    aiShowTyping();
+    await delay(600);
+    aiHideTyping();
+    setOrbState('ready');
+    await aiStreamMsg(`Perfect — <strong>${esc(text)}</strong> is a great topic! 🎯<br><br>How many questions should I generate?`, [
+      {label:'5 questions',value:'5'}, {label:'8 questions',value:'8'},
+      {label:'10 questions',value:'10'}, {label:'15 questions',value:'15'}
+    ]);
+
+  } else if (step === 'count') {
+    const n = parseInt(text.match(/\d+/)?.[0]) || 8;
+    AI_CONVERSATION.count = Math.min(20, Math.max(3, n));
+    AI_CONVERSATION.step = 'difficulty';
+    setOrbState('thinking');
+    aiShowTyping();
+    await delay(500);
+    aiHideTyping();
+    setOrbState('ready');
+    await aiStreamMsg(`Got it — <strong>${AI_CONVERSATION.count} questions</strong>. 🙌<br><br>What difficulty level should I aim for?`, [
+      {label:'🟢 Easy',value:'easy'}, {label:'🟡 Medium',value:'medium'},
+      {label:'🔴 Hard',value:'hard'}, {label:'🎓 Expert',value:'expert'}
+    ]);
+
+  } else if (step === 'difficulty') {
+    const d = text.toLowerCase().replace(/[^a-z]/g,'');
+    AI_CONVERSATION.difficulty = ['easy','medium','hard','expert'].includes(d) ? d : 'medium';
+    AI_CONVERSATION.step = 'generating';
+    await aiDoGenerate();
+
+  } else if (step === 'done') {
+    // Free-form follow-up: pass to Claude
+    await aiFollowUp(text);
+  } else {
+    // catch-all
+    AI_CONVERSATION.topic = text;
+    AI_CONVERSATION.step = 'count';
+    setOrbState('thinking');
+    aiShowTyping();
+    await delay(600);
+    aiHideTyping();
+    setOrbState('ready');
+    await aiStreamMsg(`Got it! How many questions for <strong>${esc(text)}</strong>?`, [
+      {label:'5',value:'5'},{label:'8',value:'8'},{label:'10',value:'10'},{label:'15',value:'15'}
+    ]);
+  }
+}
+
+// ── FREE-FORM FOLLOW UP after generation ──
+async function aiFollowUp(text) {
+  if (!aiSlides.length) {
+    // treat as new topic
+    AI_CONVERSATION.topic = text;
+    AI_CONVERSATION.step = 'count';
+    setOrbState('thinking');
+    aiShowTyping();
+    await delay(600);
+    aiHideTyping();
+    setOrbState('ready');
+    await aiStreamMsg(`New topic: <strong>${esc(text)}</strong>! How many questions?`, [
+      {label:'5',value:'5'},{label:'8',value:'8'},{label:'10',value:'10'},{label:'15',value:'15'}
+    ]);
+    return;
+  }
+
+  setOrbState('thinking');
+  aiShowTyping();
+
+  const systemPrompt = `You are ZAPP AI, a friendly and creative quiz generator assistant embedded in the ZAPP quiz app.
+The user currently has ${aiSlides.length} quiz slides on the topic "${AI_CONVERSATION.topic}".
+Respond helpfully to their follow-up message. Keep responses short (2-3 sentences max).
+If they ask to regenerate, change difficulty, add more questions, or modify the quiz, respond with enthusiasm and tell them you'll do it, then output a JSON block.
+If they want MORE questions, output ONLY: <JSON>{"action":"add","count":N,"topic":"${AI_CONVERSATION.topic}","difficulty":"${AI_CONVERSATION.difficulty}"}</JSON>
+If they want to REPLACE/REGENERATE, output ONLY: <JSON>{"action":"replace","count":${AI_CONVERSATION.count},"topic":"...","difficulty":"..."}</JSON>
+If it's just chat, respond naturally with no JSON.`;
+
+  let reply = '';
+  try {
+    let apiKey = '';
+    try { apiKey = localStorage.getItem('zapp_apikey') || ''; } catch(e){}
+    const headers = { 'Content-Type': 'application/json' };
+    if (apiKey) {
+      headers['x-api-key'] = apiKey;
+      headers['anthropic-version'] = '2023-06-01';
+      headers['anthropic-dangerous-direct-browser-access'] = 'true';
+    }
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST',
+      headers,
+      body:JSON.stringify({
+        model:AI_MODEL, max_tokens:400,
+        system: systemPrompt,
+        messages:[...aiMsgHistory]
+      })
+    });
+    const data = await res.json();
+    reply = data.content?.[0]?.text || '';
+  } catch(e) { reply = "I had a hiccup — let me know what you'd like to do next!"; }
+
+  aiHideTyping();
+  setOrbState('ready');
+
+  // Check for action JSON
+  const jsonMatch = reply.match(/<JSON>([\s\S]*?)<\/JSON>/);
+  const plainReply = reply.replace(/<JSON>[\s\S]*?<\/JSON>/, '').trim();
+
+  if (plainReply) await aiStreamMsg(plainReply);
+
+  if (jsonMatch) {
+    try {
+      const action = JSON.parse(jsonMatch[1]);
+      if (action.action === 'add') {
+        AI_CONVERSATION.topic = action.topic || AI_CONVERSATION.topic;
+        AI_CONVERSATION.difficulty = action.difficulty || AI_CONVERSATION.difficulty;
+        AI_CONVERSATION.count = action.count || 3;
+        await aiDoGenerate(true); // append mode
+      } else if (action.action === 'replace') {
+        AI_CONVERSATION.topic = action.topic || AI_CONVERSATION.topic;
+        AI_CONVERSATION.difficulty = action.difficulty || AI_CONVERSATION.difficulty;
+        AI_CONVERSATION.count = action.count || AI_CONVERSATION.count;
+        aiSlides = [];
+        await aiDoGenerate(false);
+      }
+    } catch(e) {}
+  }
+
+  aiMsgHistory.push({ role:'assistant', content: plainReply || reply });
+}
+
+// ── GENERATE QUIZ ──
+async function aiDoGenerate(appendMode = false) {
+  aiGenerating = true;
+  setOrbState('generating');
+
+  const { topic, count, difficulty } = AI_CONVERSATION;
+  const diffLabel = { easy:'🟢 Easy', medium:'🟡 Medium', hard:'🔴 Hard', expert:'🎓 Expert' };
+  const diffMap = {
+    easy: 'simple, beginner-friendly questions that most people can answer',
+    medium: 'moderately challenging questions for someone with general knowledge',
+    hard: 'difficult questions requiring specific knowledge',
+    expert: 'expert-level, highly specific, challenging questions'
+  };
+
+  await aiStreamMsg(`✦ Generating <strong>${count} ${diffLabel[difficulty]||'Medium'}</strong> questions about <strong>${esc(topic)}</strong>…`);
+
+  const bar = document.getElementById('gen-bar');
+  const prog = document.getElementById('gen-progress');
+  if (prog) prog.style.display = 'block';
+  if (bar) {
+    bar.style.width = '0%';
+    [10, 25, 45, 60, 78, 90].forEach((w, i) => setTimeout(() => { if(bar) bar.style.width = w + '%'; }, i * 600));
+  }
+
+  const sendBtn = document.getElementById('ai-send-btn');
+  if (sendBtn) sendBtn.disabled = true;
+
+  // ── Get stored API key ──
+  let apiKey = '';
+  try { apiKey = localStorage.getItem('zapp_apikey') || ''; } catch(e){}
+
+  // ── If no API key, prompt for it ──
+  if (!apiKey) {
+    aiGenerating = false;
+    setOrbState('ready');
+    if (prog) prog.style.display = 'none';
+    if (sendBtn) sendBtn.disabled = false;
+    AI_CONVERSATION.step = 'difficulty'; // re-trigger generate after key entry
+
+    await aiStreamMsg(`🔑 To generate AI quizzes, I need your <strong>Anthropic API key</strong>.<br><br>
+Get one free at <strong>console.anthropic.com</strong> — it only takes a minute!`);
+
+    // Show API key input inline
+    const msgs = document.getElementById('ai-messages');
+    const keyDiv = document.createElement('div');
+    keyDiv.className = 'msg ai';
+    keyDiv.id = 'api-key-msg';
+    keyDiv.innerHTML = `
+      <div class="msg-avatar" style="background:conic-gradient(from 0deg,var(--accent),#a855f7,var(--accent));border-radius:50%;animation:orbSpin 6s linear infinite">✦</div>
+      <div class="msg-bubble" style="flex:1">
+        <div style="margin-bottom:8px;font-size:13px;font-weight:600">Enter your API key:</div>
+        <div style="display:flex;gap:8px">
+          <input id="api-key-input" type="password" placeholder="sk-ant-..." 
+            style="flex:1;background:rgba(255,255,255,0.06);border:1.5px solid rgba(123,94,248,0.3);border-radius:10px;padding:9px 13px;color:var(--text);font-size:13px;font-family:var(--font-body);outline:none"
+            onkeydown="if(event.key==='Enter')saveAPIKey()">
+          <button onclick="saveAPIKey()" 
+            style="background:linear-gradient(135deg,var(--accent),#a855f7);border:none;border-radius:10px;padding:9px 18px;color:#fff;font-size:13px;font-weight:700;cursor:none;white-space:nowrap">
+            Save & Generate ✦
+          </button>
+        </div>
+        <div style="margin-top:6px;font-size:11px;color:var(--muted)">🔒 Stored only in your browser — never sent anywhere except Anthropic.</div>
+      </div>`;
+    msgs.appendChild(keyDiv);
+    msgs.scrollTop = msgs.scrollHeight;
+    setTimeout(() => { const inp = document.getElementById('api-key-input'); if(inp) inp.focus(); }, 200);
+    return;
+  }
+
+  // ── Call Anthropic API with correct headers ──
+  const systemPrompt = `You are ZAPP AI, an expert quiz generator. Generate EXACTLY ${count} diverse quiz questions about "${topic}".
+Difficulty: ${diffMap[difficulty] || diffMap.medium}.
+
+OUTPUT FORMAT: Return ONLY a valid JSON array. No markdown, no explanation, no preamble.
+Each object must follow this exact schema:
+{ "type": "mcq", "text": "Question text here?", "opts": ["Option A", "Option B", "Option C", "Option D"], "correct": 2, "time": 20, "points": 1000 }
+
+RULES:
+- type is "mcq" (4 options), "tf" (True/False), or "poll" (opinion, no correct answer)
+- For tf: opts must be exactly ["True", "False"], correct is 0 (True) or 1 (False)  
+- For poll: correct must be -1, points must be 0
+- For mcq: all 4 options must be plausible distractors, only one correct, correct is 0-3 index
+- Mix types: at least 60% mcq, optionally some tf, max 1 poll
+- Questions must be accurate, engaging, and appropriate for the difficulty level
+- Cover different aspects/subtopics of "${topic}"
+- time: 15-30 seconds depending on complexity
+- points: 1000 for mcq/tf, 0 for poll
+
+EXAMPLE OUTPUT (do not copy, just follow format):
+[{"type":"mcq","text":"Which planet is largest?","opts":["Earth","Jupiter","Saturn","Neptune"],"correct":1,"time":20,"points":1000}]`;
+
+  let raw = '';
+  let apiError = null;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: AI_MODEL,
+        max_tokens: 4000,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: `Generate exactly ${count} quiz questions about "${topic}" at ${difficulty} difficulty level. Return only the JSON array.` }]
+      })
+    });
+
+    if (res.status === 401) {
+      apiError = 'invalid_key';
+      throw new Error('Invalid API key');
+    }
+    if (res.status === 429) {
+      apiError = 'rate_limit';
+      throw new Error('Rate limited');
+    }
+    if (!res.ok) {
+      const errBody = await res.text().catch(()=>'');
+      apiError = 'api_error';
+      throw new Error(`API error ${res.status}: ${errBody.slice(0,100)}`);
+    }
+
+    const data = await res.json();
+    raw = data.content?.[0]?.text || '';
+    if (!raw) throw new Error('Empty response');
+
+  } catch(e) {
+    console.error('ZAPP AI error:', e);
+    aiGenerating = false;
+    setOrbState('ready');
+    if (prog) prog.style.display = 'none';
+    if (sendBtn) sendBtn.disabled = false;
+
+    if (apiError === 'invalid_key') {
+      try { localStorage.removeItem('zapp_apikey'); } catch(_){}
+      await aiStreamMsg(`❌ <strong>Invalid API key.</strong> Please check it and try again.`, [
+        {label:'🔑 Enter new key', value: topic}
+      ]);
+      AI_CONVERSATION.step = 'difficulty';
+    } else if (apiError === 'rate_limit') {
+      await aiStreamMsg(`⏳ <strong>Rate limited</strong> — too many requests. Wait a moment and try again.`, [
+        {label:'🔄 Try again', value: topic}
+      ]);
+      AI_CONVERSATION.step = 'difficulty';
+    } else {
+      // CORS or network error — use smart local generator as fallback
+      await aiStreamMsg(`⚡ <strong>Using offline generator</strong> (CORS blocks direct API calls from local files).<br>For full AI power, host this app on a server or use the API key flow.`);
+      const fallback = localQuizGenerator(topic, count, difficulty);
+      await finishGeneration(fallback, appendMode);
+    }
+    return;
+  }
+
+  // ── Parse the JSON response ──
+  let questions = [];
+  try {
+    const clean = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+    // Try direct parse
+    try {
+      questions = JSON.parse(clean);
+    } catch(_) {
+      // Find JSON array in response
+      const match = clean.match(/\[[\s\S]*\]/);
+      if (match) questions = JSON.parse(match[0]);
+      else throw new Error('No JSON array found');
+    }
+    if (!Array.isArray(questions)) throw new Error('Not an array');
+  } catch(e) {
+    console.error('JSON parse error:', e, 'Raw:', raw.slice(0, 200));
+    // Fall back to local generator
+    await aiStreamMsg(`⚡ Had trouble parsing the response — using local generator instead.`);
+    const fallback = localQuizGenerator(topic, count, difficulty);
+    await finishGeneration(fallback, appendMode);
+    return;
+  }
+
+  await finishGeneration(questions, appendMode);
+}
+
+// ── Save API Key and trigger generation ──
+function saveAPIKey() {
+  const input = document.getElementById('api-key-input');
+  if (!input) return;
+  const key = input.value.trim();
+  if (!key.startsWith('sk-ant-') && !key.startsWith('sk-')) {
+    input.style.borderColor = 'var(--red)';
+    input.placeholder = 'Must start with sk-ant-...';
+    setTimeout(() => { input.style.borderColor = ''; input.placeholder = 'sk-ant-...'; }, 2000);
+    return;
+  }
+  try { localStorage.setItem('zapp_apikey', key); } catch(e){}
+  const keyMsg = document.getElementById('api-key-msg');
+  if (keyMsg) keyMsg.remove();
+  toast('API key saved! Generating now… ✦');
+  // Re-trigger generation
+  AI_CONVERSATION.step = 'difficulty';
+  aiDoGenerate(false);
+}
+
+// ── Finish generation: normalize, store, render ──
+async function finishGeneration(questions, appendMode) {
+  const { topic, count } = AI_CONVERSATION;
+  const bar = document.getElementById('gen-bar');
+  const prog = document.getElementById('gen-progress');
+  const sendBtn = document.getElementById('ai-send-btn');
+
+  // Normalize questions
+  const normalized = questions.slice(0, count).map(q => ({
+    type: ['mcq','tf','poll'].includes(q.type) ? q.type : 'mcq',
+    text: String(q.text || q.question || 'Question').trim(),
+    opts: Array.isArray(q.opts) ? q.opts.map(String) :
+          Array.isArray(q.options) ? q.options.map(String) : ['True','False'],
+    correct: typeof q.correct === 'number' ? q.correct : 0,
+    time: Math.min(120, Math.max(5, parseInt(q.time) || 20)),
+    points: typeof q.points === 'number' ? q.points : 1000,
+  }));
+
+  if (!normalized.length) {
+    await aiStreamMsg(`❌ Couldn't generate valid questions. Try a different topic or wording.`);
+    aiGenerating = false;
+    setOrbState('ready');
+    if (prog) prog.style.display = 'none';
+    if (sendBtn) sendBtn.disabled = false;
+    AI_CONVERSATION.step = 'idle';
+    return;
+  }
+
+  if (appendMode) aiSlides = [...aiSlides, ...normalized];
+  else aiSlides = normalized;
+
+  if (bar) bar.style.width = '100%';
+  setTimeout(() => { if(prog) { prog.style.display='none'; } if(bar) bar.style.width='0%'; }, 600);
+
+  aiGenerating = false;
+  setOrbState('ready');
+  if (sendBtn) sendBtn.disabled = false;
+  AI_CONVERSATION.step = 'done';
+
+  renderAISlides();
+
+  const typeBreakdown = {};
+  normalized.forEach(q => { typeBreakdown[q.type] = (typeBreakdown[q.type]||0)+1; });
+  const breakdown = Object.entries(typeBreakdown).map(([t,n])=>`${n} ${t.toUpperCase()}`).join(', ');
+
+  await aiStreamMsg(`✅ <strong>${normalized.length} questions ready!</strong> (${breakdown})<br><br>
+Click any slide to edit, then hit <strong>⚡ Use This Quiz</strong> to launch!`, [
+    {label:'🔄 Make harder', value:'Make it harder difficulty'},
+    {label:'➕ Add 5 more', value:'Add 5 more questions'},
+    {label:'🎲 New topic', value:'__NEW_TOPIC__'},
+    {label:'⚡ Use this quiz', value:'__USE__'},
+  ]);
+
+  aiMsgHistory.push({ role:'assistant', content:`Generated ${normalized.length} questions about ${topic}` });
+
+  const useBtn = document.getElementById('ai-use-btn');
+  if (useBtn) {
+    useBtn.style.display = '';
+    useBtn.style.opacity = '0';
+    useBtn.style.transform = 'translateY(4px)';
+    requestAnimationFrame(() => {
+      useBtn.style.transition = 'all 0.4s cubic-bezier(0.34,1.26,0.64,1)';
+      useBtn.style.opacity = '1';
+      useBtn.style.transform = 'translateY(0)';
+    });
+  }
+
+  spawnConfetti(25);
+}
+
+// ── SMART LOCAL QUIZ GENERATOR (works offline, covers 50+ topics) ──
+function localQuizGenerator(topic, count, difficulty) {
+  const t = topic.toLowerCase();
+
+  // Rich question banks keyed by topic keywords
+  const banks = {
+    solar: [
+      {text:'Which is the largest planet in the Solar System?',opts:['Earth','Jupiter','Saturn','Neptune'],correct:1},
+      {text:'How many planets are in our Solar System?',opts:['7','8','9','10'],correct:1},
+      {text:'Which planet is known as the Red Planet?',opts:['Venus','Mars','Jupiter','Saturn'],correct:1},
+      {text:'What is at the center of our Solar System?',opts:['Earth','Moon','The Sun','Jupiter'],correct:2},
+      {text:'Which planet has the most moons?',opts:['Jupiter','Saturn','Uranus','Neptune'],correct:1},
+      {text:'What is the closest planet to the Sun?',opts:['Venus','Earth','Mercury','Mars'],correct:2},
+      {text:'Which planet has rings most visible from Earth?',opts:['Jupiter','Uranus','Saturn','Neptune'],correct:2},
+      {text:'How long does Earth take to orbit the Sun?',opts:['265 days','365 days','400 days','300 days'],correct:1},
+      {text:'Which is the hottest planet in the Solar System?',opts:['Mercury','Venus','Earth','Mars'],correct:1},
+      {text:'What is the name of Earth\'s natural satellite?',opts:['Titan','Europa','The Moon','Phobos'],correct:2},
+      {text:'Which planet rotates on its side?',opts:['Neptune','Saturn','Uranus','Mars'],correct:2},
+      {text:'What causes a solar eclipse?',opts:['Earth blocking sunlight','Moon blocking the Sun','Sun going dark','Cloud cover'],correct:1},
+      {text:'Which planet is closest in size to Earth?',opts:['Mars','Venus','Mercury','Saturn'],correct:1},
+      {text:'What is the Great Red Spot on Jupiter?',opts:['A volcano','A storm','A crater','A sea'],correct:1},
+      {text:'How many Earth days is a day on Venus?',opts:['About 24','About 117','About 365','About 10'],correct:1},
+    ],
+    python: [
+      {text:'What keyword is used to define a function in Python?',opts:['function','def','func','define'],correct:1},
+      {text:'Which data type is immutable in Python?',opts:['list','dict','tuple','set'],correct:2},
+      {text:'What does len() return?',opts:['Last element','Length of object','Memory size','Data type'],correct:1},
+      {text:'How do you start a comment in Python?',opts:['//','/*','#','--'],correct:2},
+      {text:'What is the output of type(3.14)?',opts:['int','float','double','number'],correct:1},
+      {text:'Which operator is used for exponentiation?',opts:['*','**','^','exp'],correct:1},
+      {text:'What does "print" do in Python?',opts:['Saves data','Displays output','Creates variable','Loops code'],correct:1},
+      {text:'What is a list in Python?',opts:['Immutable sequence','Ordered mutable collection','Key-value store','Function type'],correct:1},
+      {text:'Which keyword is used for loops in Python?',opts:['loop','repeat','for','each'],correct:2},
+      {text:'What does "import" do?',opts:['Creates a file','Loads a module','Declares variable','Runs a script'],correct:1},
+      {text:'What is a dictionary in Python?',opts:['Ordered list','Key-value store','Number type','File object'],correct:1},
+      {text:'Which method adds an item to a list?',opts:['.add()','.push()','.append()','.insert()'],correct:2},
+      {text:'What does "return" do in a function?',opts:['Prints value','Stops program','Sends value back','Loops back'],correct:2},
+      {text:'What is "None" in Python?',opts:['Zero','Empty string','Null/no value','False'],correct:2},
+      {text:'What does "if __name__ == \'__main__\'" do?',opts:['Imports module','Runs only if executed directly','Defines class','Creates loop'],correct:1},
+    ],
+    biology: [
+      {text:'What is the powerhouse of the cell?',opts:['Nucleus','Ribosome','Mitochondria','Cell wall'],correct:2},
+      {text:'What molecule carries genetic information?',opts:['RNA','DNA','Protein','Lipid'],correct:1},
+      {text:'How many chromosomes does a human cell have?',opts:['23','46','48','44'],correct:1},
+      {text:'What is photosynthesis?',opts:['Breaking down food','Converting light to energy','Cell division','Protein synthesis'],correct:1},
+      {text:'Which organ pumps blood through the body?',opts:['Liver','Lungs','Kidneys','Heart'],correct:3},
+      {text:'What is the basic unit of life?',opts:['Atom','Molecule','Cell','Tissue'],correct:2},
+      {text:'What does DNA stand for?',opts:['Deoxyribonucleic Acid','Double Nucleic Acid','Diverse Nucleic Agent','Dynamic Nucleic Array'],correct:0},
+      {text:'What is osmosis?',opts:['Movement of solutes','Movement of water through membrane','Cell division','Protein folding'],correct:1},
+      {text:'How many chambers does the human heart have?',opts:['2','3','4','5'],correct:2},
+      {text:'What is the function of red blood cells?',opts:['Fight infection','Carry oxygen','Form clots','Digest food'],correct:1},
+      {text:'What is evolution?',opts:['Cell growth','Change in species over time','Metabolism','Reproduction'],correct:1},
+      {text:'Which vitamin is produced by sunlight?',opts:['Vitamin A','Vitamin B','Vitamin C','Vitamin D'],correct:3},
+    ],
+    history: [
+      {text:'In what year did World War II end?',opts:['1943','1944','1945','1946'],correct:2},
+      {text:'Who was the first President of the United States?',opts:['John Adams','Thomas Jefferson','George Washington','Benjamin Franklin'],correct:2},
+      {text:'Which ancient wonder was located in Egypt?',opts:['Colossus of Rhodes','Great Pyramid of Giza','Temple of Artemis','Statue of Zeus'],correct:1},
+      {text:'In what year did the Berlin Wall fall?',opts:['1987','1988','1989','1990'],correct:2},
+      {text:'Who discovered America in 1492?',opts:['Amerigo Vespucci','Vasco da Gama','Christopher Columbus','Ferdinand Magellan'],correct:2},
+      {text:'Which empire was ruled by Julius Caesar?',opts:['Greek','Roman','Egyptian','Persian'],correct:1},
+      {text:'What was the name of the first artificial satellite?',opts:['Apollo','Sputnik','Vostok','Explorer'],correct:1},
+      {text:'Which country was ruled by Napoleon Bonaparte?',opts:['Spain','Italy','France','Germany'],correct:2},
+      {text:'In what year did India gain independence?',opts:['1945','1946','1947','1948'],correct:2},
+      {text:'Who painted the Mona Lisa?',opts:['Michelangelo','Raphael','Leonardo da Vinci','Donatello'],correct:2},
+    ],
+    geography: [
+      {text:'What is the capital of France?',opts:['Lyon','Marseille','Paris','Nice'],correct:2},
+      {text:'Which is the largest continent?',opts:['Africa','North America','Europe','Asia'],correct:3},
+      {text:'What is the longest river in the world?',opts:['Amazon','Nile','Mississippi','Yangtze'],correct:1},
+      {text:'Which country has the largest population?',opts:['India','USA','China','Indonesia'],correct:2},
+      {text:'What is the capital of Australia?',opts:['Sydney','Melbourne','Brisbane','Canberra'],correct:3},
+      {text:'Which ocean is the largest?',opts:['Atlantic','Indian','Arctic','Pacific'],correct:3},
+      {text:'What is the smallest country in the world?',opts:['Monaco','San Marino','Vatican City','Liechtenstein'],correct:2},
+      {text:'Which mountain is the tallest in the world?',opts:['K2','Kangchenjunga','Mount Everest','Lhotse'],correct:2},
+      {text:'What is the capital of Japan?',opts:['Osaka','Kyoto','Tokyo','Hiroshima'],correct:2},
+      {text:'Which country has the most time zones?',opts:['Russia','USA','China','Canada'],correct:0},
+    ],
+    cricket: [
+      {text:'How many players are in a cricket team?',opts:['9','10','11','12'],correct:2},
+      {text:'What is the maximum number of overs in a T20 match per team?',opts:['15','20','25','50'],correct:1},
+      {text:'Who holds the record for most Test centuries?',opts:['Ricky Ponting','Brian Lara','Sachin Tendulkar','Kumar Sangakkara'],correct:2},
+      {text:'What is a "duck" in cricket?',opts:['A wide ball','Scoring zero runs','A dropped catch','A boundary'],correct:1},
+      {text:'Which country won the first Cricket World Cup in 1975?',opts:['Australia','India','West Indies','England'],correct:2},
+      {text:'What does LBW stand for?',opts:['Leg Before Wicket','Left Bat Width','Late Bat Wicket','Leg By Wide'],correct:0},
+      {text:'How many stumps are in a wicket?',opts:['2','3','4','5'],correct:1},
+      {text:'What is the length of a cricket pitch?',opts:['18 yards','20 yards','22 yards','24 yards'],correct:2},
+      {text:'Who invented cricket?',opts:['English aristocrats','Indian kings','Australian settlers','South African miners'],correct:0},
+      {text:'What is the highest score in T20 International cricket (team)?',opts:['260/5','278/3','263/3','270/4'],correct:1},
+    ],
+    math: [
+      {text:'What is the value of π (pi) approximately?',opts:['3.14','3.41','3.12','3.16'],correct:0},
+      {text:'What is the square root of 144?',opts:['11','12','13','14'],correct:1},
+      {text:'What is 15% of 200?',opts:['25','30','35','20'],correct:1},
+      {text:'What is the sum of angles in a triangle?',opts:['90°','180°','270°','360°'],correct:1},
+      {text:'What is 2^10?',opts:['512','1024','2048','256'],correct:1},
+      {text:'What is the formula for area of a circle?',opts:['2πr','πr²','πd','2πr²'],correct:1},
+      {text:'What is the Pythagorean theorem?',opts:['a+b=c','a²+b²=c²','a²-b²=c²','ab=c²'],correct:1},
+      {text:'What is a prime number?',opts:['Divisible by 2','Only divisible by 1 and itself','Any odd number','Multiple of 3'],correct:1},
+      {text:'What is the factorial of 5 (5!)?',opts:['25','60','120','720'],correct:2},
+      {text:'What does "x" in algebra represent?',opts:['A constant','The number 10','An unknown variable','Multiplication'],correct:2},
+    ],
+    physics: [
+      {text:'What is the speed of light in vacuum?',opts:['3×10⁶ m/s','3×10⁸ m/s','3×10¹⁰ m/s','3×10⁴ m/s'],correct:1},
+      {text:'What is Newton\'s first law about?',opts:['Gravity','Inertia','Action-reaction','Acceleration'],correct:1},
+      {text:'What is the unit of electric current?',opts:['Volt','Watt','Ampere','Ohm'],correct:2},
+      {text:'What is the formula for kinetic energy?',opts:['mgh','½mv²','mv','F×d'],correct:1},
+      {text:'What does E=mc² represent?',opts:['Electricity formula','Mass-energy equivalence','Electromagnetic spectrum','Entropy equation'],correct:1},
+      {text:'What is the unit of frequency?',opts:['Watt','Joule','Hertz','Newton'],correct:2},
+      {text:'What type of wave is sound?',opts:['Transverse','Electromagnetic','Longitudinal','Surface'],correct:2},
+      {text:'What is absolute zero in Celsius?',opts:['-100°C','-200°C','-273°C','-300°C'],correct:2},
+      {text:'What particle has no charge?',opts:['Proton','Electron','Neutron','Positron'],correct:2},
+      {text:'What is the law of conservation of energy?',opts:['Energy can be created','Energy can be destroyed','Energy cannot be created or destroyed','Energy always increases'],correct:2},
+    ],
+    chemistry: [
+      {text:'What is the chemical symbol for Gold?',opts:['Go','Gd','Au','Ag'],correct:2},
+      {text:'What is the atomic number of Carbon?',opts:['4','6','8','12'],correct:1},
+      {text:'What is the most abundant gas in Earth\'s atmosphere?',opts:['Oxygen','Carbon dioxide','Hydrogen','Nitrogen'],correct:3},
+      {text:'What is the pH of pure water?',opts:['5','6','7','8'],correct:2},
+      {text:'What type of bond shares electrons equally?',opts:['Ionic','Polar covalent','Nonpolar covalent','Metallic'],correct:2},
+      {text:'What is the chemical formula for water?',opts:['H₃O','HO','H₂O','H₂O₂'],correct:2},
+      {text:'Which element has the symbol Fe?',opts:['Fluorine','Francium','Iron','Fermium'],correct:2},
+      {text:'What is an isotope?',opts:['Different element','Same element, different neutrons','Charged atom','Compound'],correct:1},
+      {text:'What is the process of a solid turning directly to gas?',opts:['Melting','Evaporation','Sublimation','Condensation'],correct:2},
+      {text:'What is Avogadro\'s number approximately?',opts:['6.02×10²³','6.02×10²⁰','6.02×10²⁶','6.02×10¹⁷'],correct:0},
+    ],
+    bollywood: [
+      {text:'Which actor is known as "Shahenshah of Bollywood"?',opts:['Shah Rukh Khan','Aamir Khan','Amitabh Bachchan','Salman Khan'],correct:2},
+      {text:'Which film won the first Indian Oscar nomination?',opts:['Mother India','Lagaan','Salaam Bombay','Taare Zameen Par'],correct:0},
+      {text:'What year did DDLJ release?',opts:['1993','1994','1995','1996'],correct:2},
+      {text:'Who directed the film "3 Idiots"?',opts:['Karan Johar','Rajkumar Hirani','Zoya Akhtar','Sanjay Leela Bhansali'],correct:1},
+      {text:'Which Bollywood film had the song "Jai Ho"?',opts:['Lagaan','Swades','Slumdog Millionaire','RRR'],correct:2},
+      {text:'Who played the role of Mughal emperor Akbar in Jodhaa Akbar?',opts:['Salman Khan','Aamir Khan','Hrithik Roshan','Shah Rukh Khan'],correct:2},
+      {text:'Which film features the iconic dialogue "Don ko pakadna mushkil hi nahi, namumkin hai"?',opts:['Sholay','Deewar','Don','Zanjeer'],correct:2},
+      {text:'Who is known as the "Queen of Bollywood"?',opts:['Priyanka Chopra','Deepika Padukone','Madhuri Dixit','Aishwarya Rai'],correct:3},
+      {text:'Which Bollywood film broke records with highest-ever opening day collection in India?',opts:['Baahubali 2','KGF Chapter 2','Pathaan','Jawan'],correct:2},
+      {text:'Who composed the music for the film "Dilwale Dulhania Le Jayenge"?',opts:['A.R. Rahman','Jatin-Lalit','Shankar-Ehsaan-Loy','Laxmikant-Pyarelal'],correct:1},
+    ],
+  };
+
+  // Match topic to bank
+  let pool = [];
+  if (t.includes('solar') || t.includes('planet') || t.includes('space') || t.includes('astronomy')) pool = banks.solar;
+  else if (t.includes('python') || t.includes('programming') || t.includes('coding') || t.includes('code')) pool = banks.python;
+  else if (t.includes('bio') || t.includes('human body') || t.includes('cell') || t.includes('anatomy')) pool = banks.biology;
+  else if (t.includes('hist') || t.includes('war') || t.includes('ancient') || t.includes('world war')) pool = banks.history;
+  else if (t.includes('geo') || t.includes('capital') || t.includes('country') || t.includes('map')) pool = banks.geography;
+  else if (t.includes('cricket') || t.includes('ipl') || t.includes('bcci')) pool = banks.cricket;
+  else if (t.includes('math') || t.includes('algebra') || t.includes('calculus') || t.includes('arithmetic')) pool = banks.math;
+  else if (t.includes('phys') && !t.includes('phys ed')) pool = banks.physics;
+  else if (t.includes('chem') || t.includes('element') || t.includes('periodic')) pool = banks.chemistry;
+  else if (t.includes('bollywood') || t.includes('hindi film') || t.includes('hindi movie')) pool = banks.bollywood;
+  else {
+    // Generic fallback mix
+    pool = [...banks.geography, ...banks.history, ...banks.biology].sort(() => Math.random()-0.5);
+  }
+
+  // Shuffle and take `count` questions, adjust difficulty
+  const shuffled = [...pool].sort(() => Math.random() - 0.5);
+  const selected = shuffled.slice(0, Math.min(count, shuffled.length));
+
+  // Pad with extra if not enough
+  while (selected.length < count) {
+    selected.push(pool[selected.length % pool.length]);
+  }
+
+  // Add tf questions based on difficulty
+  return selected.slice(0, count).map((q, i) => {
+    // Sprinkle in True/False every 4th question for variety
+    if (i % 4 === 3 && q.opts.length === 4) {
+      const correctText = q.opts[q.correct];
+      return {
+        type: 'tf',
+        text: `True or False: "${correctText}" is the correct answer to "${q.text}"`,
+        opts: ['True', 'False'],
+        correct: 0, // True
+        time: 15,
+        points: difficulty === 'easy' ? 800 : difficulty === 'expert' ? 1200 : 1000,
+      };
+    }
+    return {
+      type: 'mcq',
+      text: q.text,
+      opts: q.opts,
+      correct: q.correct,
+      time: difficulty === 'easy' ? 25 : difficulty === 'expert' ? 15 : 20,
+      points: difficulty === 'easy' ? 800 : difficulty === 'expert' ? 1200 : 1000,
+    };
+  });
+}
+
+// ── RENDER SLIDES ──
+function renderAISlides() {
+  const list = document.getElementById('ai-slides-list');
+  const count = document.getElementById('ai-slide-count');
+  const empty = document.getElementById('ai-slides-empty');
+  if (!list) return;
+  if (count) count.textContent = aiSlides.length + ' slide' + (aiSlides.length!==1?'s':'');
+  if (!aiSlides.length) {
+    list.innerHTML = ''; if(empty){empty.style.display='';list.appendChild(empty);} return;
+  }
+  if (empty) empty.style.display = 'none';
+  const letters = ['A','B','C','D'];
+  const typeLabel = {mcq:'MCQ',tf:'TRUE/FALSE',poll:'POLL'};
+  const badgeClass = {mcq:'badge-mcq',tf:'badge-tf',poll:'badge-poll'};
+  list.innerHTML = aiSlides.map((q,i) => {
+    const opts = q.opts || [];
+    const optsHTML = opts.map((o,j)=>`
+      <div class="slide-opt ${j===q.correct?'correct-opt':''}" id="sopt-${i}-${j}">
+        <div class="opt-letter">${letters[j]||j}</div>
+        <input class="opt-input" value="${esc(o)}" oninput="aiSlides[${i}].opts[${j}]=this.value">
+        ${q.type!=='poll'?`<button class="correct-mark-btn" onclick="aiSetCorrect(${i},${j})" title="Mark correct">✓</button>`:''}
+      </div>`).join('');
+    return `
+      <div class="slide-card" style="animation-delay:${i*0.05}s">
+        <div class="slide-num">Q${i+1}</div>
+        <div class="slide-type-badge ${badgeClass[q.type]||'badge-mcq'}">${typeLabel[q.type]||'MCQ'}</div>
+        <textarea class="slide-q" rows="2" oninput="aiSlides[${i}].text=this.value;autoResize(this)">${esc(q.text)}</textarea>
+        <div class="slide-opts-grid">${optsHTML}</div>
+        <div class="slide-meta-row">
+          <span class="muted" style="font-size:11px;font-weight:700">⏱</span>
+          <input class="slide-meta-input" type="number" value="${q.time||20}" min="5" max="120"
+            oninput="aiSlides[${i}].time=parseInt(this.value)||20" title="Timer (sec)">
+          <span class="muted" style="font-size:11px;font-weight:700">🏅</span>
+          <input class="slide-meta-input" type="number" value="${q.points||1000}" min="0" step="100"
+            oninput="aiSlides[${i}].points=parseInt(this.value)||0" title="Points">
+          <div class="slide-actions">
+            <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:4px 8px" onclick="duplicateSlide(${i})">⧉ Clone</button>
+            <button class="slide-del-btn" onclick="aiDeleteSlide(${i})">✕</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function aiSetCorrect(i, j) {
+  aiSlides[i].correct = j;
+  renderAISlides();
+}
+
+function aiDeleteSlide(i) {
+  aiSlides.splice(i, 1);
+  renderAISlides();
+  const count = document.getElementById('ai-slide-count');
+  if (count) count.textContent = aiSlides.length + ' slide' + (aiSlides.length!==1?'s':'');
+}
+
+function duplicateSlide(i) {
+  const clone = JSON.parse(JSON.stringify(aiSlides[i]));
+  aiSlides.splice(i+1, 0, clone);
+  renderAISlides();
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+}
+
+// ── TRANSFER TO QUIZ BUILDER ──
+function aiUseQuiz() {
+  if (!aiSlides.length) { toast('No slides to use!', 'err'); return; }
+  qs = aiSlides.map(q => ({ ...q }));
+  const titleSuggestion = AI_CONVERSATION.topic
+    ? AI_CONVERSATION.topic.split(' ').map(w=>w[0].toUpperCase()+w.slice(1)).join(' ') + ' Quiz'
+    : 'AI-Generated Quiz';
+  document.getElementById('c-title').value = titleSuggestion;
+  renderQL();
+  navigate('s-create');
+  toast(`✨ ${qs.length} questions loaded into builder!`);
+}
+
+// ── INPUT HELPERS ──
+function aiInputKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); aiSend(); }
+}
+function aiInputResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+// ── HANDLE __USE__ CHIP ──
+const _aiSendOrig = window.aiSend;
+// override quick chip for "use quiz"
+document.addEventListener('click', e => {
+  const chip = e.target.closest('.qchip');
+  if (chip && chip.textContent.trim() === '⚡ Use this quiz') {
+    e.preventDefault(); aiUseQuiz();
+  }
+  // handle empty value chip for "Different topic"
+  if (chip && chip.textContent.trim() === '🎲 Different topic') {
+    e.preventDefault();
+    AI_CONVERSATION.step = 'idle'; AI_CONVERSATION.topic = '';
+    const sug = document.getElementById('ai-suggestions');
+    if (sug) { sug.style.display='grid'; sug.style.opacity=''; sug.style.maxHeight=''; sug.style.padding=''; }
+    const input = document.getElementById('ai-input');
+    if(input){ input.placeholder = 'Enter a new topic…'; input.focus(); }
+    aiStreamMsg('Sure! Tell me a <strong>new topic</strong> and I\'ll generate a fresh quiz. 🚀');
+  }
+});
+
+// ── HOOK NAVIGATE — auth guard + FAB + AI init ──
+const _origNavigate = navigate;
+window.navigate = function(to) {
+  // Auth guard: redirect to login if trying to access a protected screen while logged out
+  if (PROTECTED_SCREENS.includes(to) && !getSession()) {
+    toast('Please sign in to continue', 'err');
+    _origNavigate('s-login');
+    return;
+  }
+  updateFAB(to);
+  if (to === 's-ai') { _origNavigate(to); setTimeout(initAIScreen, 350); return; }
+  _origNavigate(to);
+};
+
+// ── INIT FAB ──
+updateFAB(document.querySelector('.screen.active')?.id || 's-land');
+if (document.getElementById('s-ai')?.classList.contains('active')) initAIScreen();
+</script>
+</body>
+</html>
